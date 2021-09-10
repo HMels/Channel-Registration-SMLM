@@ -190,3 +190,6 @@ class SplinesModel(tf.keras.Model):
         self.CP_idx_nn = (tf.Variable(CP_idx_nn, dtype=tf.int32,
                                   trainable=False, name='ControlPointsIdx')
                           if CP_idx_nn is not None else {})
+        
+        
+    
