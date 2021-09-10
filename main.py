@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # main.py
 """
 Created on Thu Sep  9 14:55:12 2021
@@ -36,7 +35,6 @@ fig1.suptitle('Distribution of distances between neighbouring Localizations')
 _, _, fig2, _ = output_fn.errorFOV(DS1.ch1.pos,  DS1.ch2_original.pos, DS1.ch2.pos, direct=True)
 fig2.suptitle('Distribution of error between neighbouring pairs over radius')
     
-=======
 # main.py
 """
 Created on Thu Sep  9 14:55:12 2021
@@ -74,5 +72,4 @@ fig1.suptitle('Distribution of distances between neighbouring Localizations')
 _, _, fig2, _ = output_fn.errorFOV(DS1.ch1.pos,  DS1.ch2_original.pos, DS1.ch2.pos, direct=True)
 fig2.suptitle('Distribution of error between neighbouring pairs over radius')
     
->>>>>>> 620b2dc63c94701d67d9e60828504973bb6dae6a
 print('\nI: The original average distance was', avg1,'. The mapping has', avg2)
