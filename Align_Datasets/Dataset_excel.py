@@ -1,45 +1,41 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Sep 10 18:40:56 2021
-
-@author: Mels
+TO DO:
+    find a way to load and map the second dataset
 """
+
 import numpy as np
-from photonpy import Dataset
-import tensorflow as tf
 import copy
+import tqdm
+from photonpy import GaussianPSFMethods
+from photonpy.cpp.context import Context
+from scipy.interpolate import InterpolatedUnivariateSpline
 import matplotlib.pyplot as plt
+from photonpy.gaussian.fitters import fit_sigma_2d
+from photonpy.cpp.lib import SMLM
 import pandas as pd
 
-from AlignModel import AlignModel
+from Align_Datasets.AlignModel import AlignModel
 
-class AlignModelExcel(AlignModel):
-    def __init__(self, path, subset=None, align_rcc=True, coupled=False):
+
+class Dataset_excel(AlignModel):
+    def __init__(self, path, align_rcc=True, coupled=False, 
+                 imgshape=[512, 512], shift_rcc=None):
+        AlignModel.__init__(self)
         
-        self.shift_rcc=None
-        self.subset=subset
+        self.imgshape=imgshape
+        self.shift_rcc=shift_rcc
         self.coupled=coupled
         self.gridsize=None
         self.ch1, self.ch2 = self.load_dataset(path)
+        self.couple_dataset(Filter=False)
+        self.ch2_original=copy.deepcopy(self.ch2)
+        self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         
         
     #%% functions
-    def load_dataset(ds, imgshape=[512, 512], shift=None):
-        '''
-        Loads the dataset
-    
-        Parameters
-        ----------
-        ds : str
-            The path where the data is located.
-    
-        Returns
-        -------
-        locs_A , locs_B : : Nx2 nupy array
-            Localizations of both channels.
-    
-        '''
-        data = pd.read_csv(ds)
+    def load_dataset(self,path, shift_rcc=None):
+        data = pd.read_csv(path)
         grouped = data.groupby(data.Channel)
         ch1 = grouped.get_group(1)
         ch2 = grouped.get_group(2)
@@ -49,37 +45,62 @@ class AlignModelExcel(AlignModel):
         data2 = np.array(ch2[['X(nm)','Y(nm)', 'Pos','Int (Apert.)']])
         data2 = np.column_stack((data2, np.arange(data2.shape[0])))
     
-        locs1 = rcc.Localizations(data1, imgshape)
-        locs2 = rcc.Localizations(data2, imgshape)
-        if shift is None:
-            shift=locs1.align(locs2)
-            print('Shifted with RCC of', shift)
-            
-        locs1.pos += shift
-
-        ch1 = Dataset(length=data.shape[0], dims=2, imgshape=imgshape,)
-            
+        ch1 = channel(data1, self.imgshape)
+        ch2 = channel(data2, self.imgshape)
+        if shift_rcc is None:
+            shift_rcc=ch1.align(ch2)
+            print('Shifted with RCC of', shift_rcc)  
+        ch1.pos += shift_rcc 
+           
         return ch1, ch2
     
+        
+    def couple_dataset(self, maxDist=150, Filter=False):
+        print('Coupling datasets with an iterative method...')
+        if Filter: print('Throwing away all pairs with a distance above',maxDist,'nm')
+        
+        locsA = []
+        locsB = []
+        for i in range(self.ch1.len):
+            # First find the positions in the same frame
+            sameframe_pos = np.squeeze(self.ch2.pos[np.argwhere(self.ch2.frame==self.ch1.frame[i]),:], axis=1)
+            
+            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-sameframe_pos)**2,1))
+            if not Filter or np.min(dists)<maxDist: 
+                locsA.append(self.ch1.pos[i,:])
+                locsB.append(sameframe_pos[np.argmin(dists),:])
+            
+        if not locsA or not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
+        self.ch1.pos = np.array(locsA)
+        self.ch2.pos = np.array(locsB)
+        self.coupled = True
+        
     
-#%%
-class Localizations:
-    def __init__(self, data, imgshape):
-        self.pos = data[:,:2]
+    def imgparams(self):
+    # calculate borders of system
+    # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
+    # the size of the image and a 2-vector containing the middle of the image
+        img = np.empty([2,2], dtype = float)
+        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
+        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
+        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
+        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
+        return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
+
+
+#%% channel 
+class channel:
+    def __init__(self, data, imgshape=[512, 512]):
+        self.pos = np.float32(data[:,:2])
         self.frame = data[:,2]
         self._xyI = data[:,3]
         self.index = data[:,4]
-        self.imgshape = np.array(imgshape)
         self.len = data.shape[0]       #### obviously false but it works for now
-        # The indices of the coupled datasets
-        self.NNidx = None
+        self.imgshape=imgshape 
         
         
     def compile_data(self):
         return np.concatenate((self.pos, self.frame[:,None],self._xyI[:,None], self.index[:,None]), axis=1)
-    
-    def copy_channel(self):
-        return Localizations(self.compile_data(), self.imgshape)
     
     def generate_xyI(self):
     # creates an intensity of 1 for each pos
@@ -97,45 +118,14 @@ class Localizations:
     def renderGaussianSpots(self, zoom=1, sigma=1):
         imgshape = np.array(self.imgshape)*zoom
         with Context() as ctx:
-            img = np.zeros(imgshape,dtype=np.float64)
+            img = np.zeros(imgshape,dtype=np.float32)
             spots = np.zeros((self.len, 5), dtype=np.float32)
             spots[:, 0] = self.pos[:,0] * zoom
             spots[:, 1] = self.pos[:,1] * zoom
             spots[:, 2] = .15
             spots[:, 3] = .15
             spots[:, 4] = 1
-            return GaussianPSFMethods(ctx).Draw(img, spots)
-        
-    
-    def couple_dataset(self, other, maxDist=50, Filter=True):
-        print('Coupling datasets with an iterative method...')
-        
-        self.NNidx = []
-        other.NNidx = []
-        Dist = []
-        for i in range(self.len):
-            # First find the positions in the same frame
-            sameframe_pos = np.squeeze(other.pos[np.argwhere(other.frame==self.frame[i]),:], axis=1)
-            sameframe_idx = np.squeeze(other.index[np.argwhere(other.frame==self.frame[i])], axis=1)
-            
-            dists = np.sqrt(np.sum((self.pos[i,:]-sameframe_pos)**2,1))
-            if not Filter or np.min(dists)<maxDist: 
-                locA=self.pos[i,:]
-                locB=sameframe_pos[np.argmin(dists),:]
-                
-                Dist.append(locA-locB)
-                self.NNidx.append(i)
-                other.NNidx.append( sameframe_idx[np.argmin(dists)].astype('int') )                
-        return self.coupled_data(), other.coupled_data(), np.array(Dist)
-    
-    
-    def coupled_data(self):
-        if self.NNidx is None:
-            print('Error: Dataset not yet coupled. Use couple_dataset()')
-        elif self.NNidx == []:
-            print('Error: No data has been coupled')
-        else:
-            return self.pos[self.NNidx,:]    
+            return GaussianPSFMethods(ctx).Draw(img, spots) 
         
     
 def rcc(xyI, framenum, timebins, rendersize, maxdrift=3, wrapfov=1, zoom=1, 

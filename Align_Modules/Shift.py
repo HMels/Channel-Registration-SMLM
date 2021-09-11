@@ -8,7 +8,7 @@ import tensorflow as tf
 from Align_Modules.Optimization_fn import Rel_entropy
 
 
-class RigidBodyModel(tf.keras.Model):
+class ShiftModel(tf.keras.Model):
     '''
     Main Layer for calculating the relative entropy of a certain deformation
     
@@ -29,9 +29,6 @@ class RigidBodyModel(tf.keras.Model):
         super().__init__(name=name)
         self.direct=tf.Variable(direct, dtype=bool, trainable=False) # is the dataset coupled
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
-        self.cos = tf.Variable(1, dtype=tf.float32, trainable=True, name='rotation',
-                               constraint=lambda t: tf.clip_by_value(t, -1, 1))
-        
 
     @tf.function 
     def call(self, ch1, ch2):
@@ -46,23 +43,9 @@ class RigidBodyModel(tf.keras.Model):
     
     @tf.function
     def transform_mat(self, ch2):
-        ## Shift
-        ch2_mapped = ch2 + self.d[None,None] 
-        
-        ## Rotate
-        sin = tf.sqrt(1-tf.pow(self.cos, 2))
-        x1 = ch2_mapped[:,:,0]*self.cos #- ch2_mapped[:,:,1]*sin
-        x2 = ch2_mapped[:,:,1]*self.cos #+ ch2_mapped[:,:,0]*sin
-        return tf.stack([x1, x2], axis =2 )
+        return ch2 + self.d[None,None] 
     
     
     @tf.function
     def transform_vec(self, ch2):
-        ## Shift
-        ch2_mapped = ch2 + self.d[None]
-        
-        ## Rotate
-        sin = tf.sqrt(1-tf.pow(self.cos, 2))
-        x1 = ch2_mapped[:,0]*self.cos #- ch2_mapped[:,1]*sin
-        x2 = ch2_mapped[:,1]*self.cos #+ ch2_mapped[:,0]*sin 
-        return tf.stack([x1, x2], axis =1 )
+        return ch2 + self.d[None]

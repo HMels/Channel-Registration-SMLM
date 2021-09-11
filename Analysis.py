@@ -76,19 +76,19 @@ class Analysis:
         else: fig, (ax1, ax2) = plt.subplots(2)
           
         # plotting the histogram
-        n2 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        n1 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         if self.ch2_original is not None:
-            n1 = ax3.hist(dist1+.25, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
-            n2 = ax3.hist(dist2, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+            n1 = ax3.hist(dist1+.25, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+            n2 = ax3.hist(dist2, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
         else:
-            n1=[0]
+            n2=[0]
         ymax = np.max([np.max(n1[0]), np.max(n2[0])]) + 50
             
         # plotting the FOV
         ax2.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
         if self.ch2_original is not None:
-            ax4.plot(r1, dist1, 'b.', alpha=.4, label='Original error')
-            ax4.plot(r2, dist2, 'r.', alpha=.4, label='Mapped error') 
+            ax4.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
+            ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
             r2=0
         xmax= np.max((np.max(r1),np.max(r2)))+50
@@ -137,10 +137,12 @@ class Analysis:
             ax4.legend()
            
         fig.show()
-        
-        if self.ch2_original is not None: return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
-        else: return avg1, fig, (ax1, ax2)
-        
+        if self.ch2_original is not None: 
+            print('The original model had an average error of',avg2,'nm\nThe mapped model has an average error of',avg1,'nm')
+            return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
+        else: 
+            print('The mapped model has an average error of',avg1,'nm')
+            return avg1, fig, (ax1, ax2)        
         
         
     #%% Channel to matrix fn
