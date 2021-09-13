@@ -30,7 +30,6 @@ class Dataset_hdf5(AlignModel):
         self.shift_rcc=None
         self.subset=subset
         self.coupled=coupled
-        self.gridsize=None
         
         '''
         atm everything is only for coupled datasets, so no KNN 3dim tensors

@@ -26,7 +26,6 @@ class Dataset_excel(AlignModel):
         self.imgshape=imgshape
         self.shift_rcc=shift_rcc
         self.coupled=coupled
-        self.gridsize=None
         self.ch1, self.ch2 = self.load_dataset(path)
         self.couple_dataset(Filter=False)
         self.ch2_original=copy.deepcopy(self.ch2)
@@ -125,7 +124,7 @@ class channel:
             spots[:, 2] = .15
             spots[:, 3] = .15
             spots[:, 4] = 1
-            return GaussianPSFMethods(ctx).Draw(img, spots) 
+            return GaussianPSFMethods(ctx).Draw(img, spots)
         
     
 def rcc(xyI, framenum, timebins, rendersize, maxdrift=3, wrapfov=1, zoom=1, 

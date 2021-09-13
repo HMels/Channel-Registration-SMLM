@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from Align_Datasets.Dataset_hdf5 import Dataset_hdf5
 from Align_Datasets.Dataset_excel import Dataset_excel
+from Align_Datasets.Generate_Dataset import Generate_Dataset
 from Analysis import Analysis
 
 
@@ -15,15 +16,27 @@ plt.close('all')
 
 pair_filter = [200, 30]  
 
-#%% Load Beads
+#%% Load datasets
+#% Load Beads
 if False:
     DS1 = Dataset_hdf5(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'],
                align_rcc=False, subset=1, coupled=True)
 
-#%% Load Excel
+#% Load Excel
 if True:
     DS1 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                         align_rcc=False, coupled=False)
+
+#% Simulate Dataset beads
+if False:
+    DS1 = Generate_Dataset(coupled=True, imgshape=[512, 512], random_deform=(True))
+    DS1.generate_dataset_beads(N=216, error=10, noise=0.005)
+    
+#% Simulate Dataset clusters
+if False:
+    DS1 = Generate_Dataset(coupled=False, imgshape=[512, 512], random_deform=(True))
+    DS1.generate_dataset_clusters(Nclust=650, N_per_clust=250, std_clust=7, error=10, noise=0.005)
+
 
 #%% Shift Transform
 DS1.Train_Shift(lr=100, Nit=500)
@@ -36,7 +49,7 @@ DS1.Transform_Affine()
 
 
 #%% CatmullRomSplines
-DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=1000, edge_grids=2)
+DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=500, edge_grids=2)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 

@@ -35,6 +35,7 @@ class AlignModel:
         self.ShiftModel = None
         self.SplinesModel = None
         self.CP_locs = None
+        self.gridsize=None
         
     # common functions (also callabel via the Dataset classes)
     def imgparams(self):
