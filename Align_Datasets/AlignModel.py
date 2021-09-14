@@ -14,6 +14,8 @@ from Align_Modules.Polynomial3 import Polynomial3Model
 from Align_Modules.RigidBody import RigidBodyModel
 from Align_Modules.Splines import SplinesModel
 from Align_Modules.Shift import ShiftModel
+from Align_Datasets.channel_class import channel
+
 
 
 #%% Align class
@@ -105,7 +107,45 @@ class AlignModel:
                 [( ch2_input[:,0]-self.x1_min+self.edge_grids)//1 ,
                  ( ch2_input[:,1]-self.x2_min+self.edge_grids)//1 ], axis=1), dtype=tf.int32)
             #self.SplinesModel.update_splines(self.CP_idx)
+            
+            
+    #%% Split dataset
+    def SplitDataset(self):
+    # Splits dataset into 2 halves for cross validation
+        N=self.ch1.pos.shape[0]
+        if self.coupled:
+            mask1=np.ones(N, dtype=bool)
+            mask1[int(N/2):]=False
+            np.random.shuffle(mask1)  # create random mask to split dataset in two
+            mask2 = np.abs(mask1-1).astype('bool')
+
+            other1=self.gather(mask1, mask1)
+            other2=self.gather(mask2, mask2)
+            
+        else:
+            mask11=np.ones(N, dtype=bool)
+            mask11[int(N/2):]=False
+            mask12=mask11
+            np.random.shuffle(mask11)  # create random mask to split dataset in two
+            np.random.shuffle(mask12)
+            mask21 = np.abs(mask11-1).astype('bool')
+            mask22 = np.abs(mask12-1).astype('bool')
+            
+            other1=self.gather(mask11, mask12)
+            other2=self.gather(mask21, mask22)
+        
+        return other1, other2
     
+    
+    def gather(self, idx1, idx2):
+    # gathers the indexes of both channels
+        other = copy.deepcopy(self)
+        
+        del other.ch1, other.ch2, other.ch2_original
+        other.ch1 = channel(pos=self.ch1.pos[idx1,:], _xyI = self.ch1._xyI()[idx1,:])
+        other.ch2 = channel(pos=self.ch2.pos[idx2,:], _xyI = self.ch2._xyI()[idx2,:])
+        other.ch2_original = channel(pos=self.ch2_original.pos[idx2,:], _xyI = self.ch2_original._xyI()[idx2,:])
+        return other
     
     #%% Optimization functions
     #@tf.function

@@ -79,11 +79,11 @@ class Analysis:
         # plotting the histogram
         n1 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         if self.ch2_original is not None:
-            n1 = ax3.hist(dist1+.25, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+            n1 = ax3.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
             n2 = ax3.hist(dist2, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
         else:
             n2=[0]
-        ymax = np.max([np.max(n1[0]), np.max(n2[0])]) + 50
+        ymax = np.max([np.max(n1[0]), np.max(n2[0])]) + 5
             
         # plotting the FOV
         ax2.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
@@ -92,7 +92,7 @@ class Analysis:
             ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
             r2=0
-        xmax= np.max((np.max(r1),np.max(r2)))+50
+        xmax= np.max((np.max(r1),np.max(r2)))+5
         
         # Plotting the averages as vlines
         ax1.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
@@ -146,6 +146,26 @@ class Analysis:
             return avg1, fig, (ax1, ax2)
 
 
+    def ErrorDistribution(self, nbins=30):
+    # just plots the error distribution after mapping
+        if not self.coupled: 
+            ch1, ch2 = self.couple_dataset(self.ch1, self.ch2)
+        else:
+            ch1=self.ch1
+            ch2=self.ch2
+        dist1, avg1, r1 = self.ErrorDist(ch1, ch2)
+        
+        plt.figure()
+        n1 = plt.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        ymax = np.max(n1[0]) + 5
+        plt.title('Zoomed in on Mapping Error')
+        plt.ylim([0,ymax])
+        plt.xlim(0)
+        plt.xlabel('distance [nm]')
+        plt.ylabel('# of localizations')
+        plt.legend()
+        
+
     #%% plotting the error in a [x1, x2] plot like in the paper        
     def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
         ## Coupling Dataset1 if not done already
@@ -184,7 +204,7 @@ class Analysis:
         
             ax[1][0].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,0], cmap=cmap)
             ax[1][0].set_xlabel('x-position [nm]')
-            ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [nm]')
+            ax[1][0].set_ylabel('Batch 2\ny-position [nm]')
             norm=mpl.colors.Normalize(vmin=np.min(dist1[:,0]), vmax=np.max(dist1[:,0]), clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[1][0])
             
@@ -198,7 +218,7 @@ class Analysis:
             fig, ax = plt.subplots(1,2)
             ax[0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
             ax[0].set_xlabel('x-position [nm]')
-            ax[0].set_ylabel('Set 1 Fiducials\ny-position [nm]')
+            ax[0].set_ylabel('Batch 1\ny-position [nm]')
             norm=mpl.colors.Normalize(vmin=np.min(dist[:,0]), vmax=np.max(dist[:,0]), clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0])
             
