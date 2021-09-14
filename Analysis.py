@@ -91,7 +91,7 @@ class Analysis:
             ax4.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
             ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
-            r2=0
+            r2=np.array(0)
         xmax= np.max((np.max(r1),np.max(r2)))+5
         
         # Plotting the averages as vlines
@@ -156,7 +156,7 @@ class Analysis:
         dist1, avg1, r1 = self.ErrorDist(ch1, ch2)
         
         plt.figure()
-        n1 = plt.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        n1 = plt.hist(dist1, label=('Mapped Error = '+str(round(avg1,2))+'nm'), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         ymax = np.max(n1[0]) + 5
         plt.title('Zoomed in on Mapping Error')
         plt.ylim([0,ymax])
@@ -189,43 +189,49 @@ class Analysis:
             dist1 = ch21-ch22
             if dist1.shape==(0,): raise ValueError('No neighbours found for channel 2')
             
+            vmin=np.min((np.min(dist[:,0]),np.min(dist1[:,0]),np.min(dist[:,1]),np.min(dist1[:,1])))
+            vmax=np.max((np.max(dist[:,0]),np.max(dist1[:,0]),np.max(dist[:,1]),np.max(dist1[:,1])))
+            
+            
             fig, ax = plt.subplots(2,2)
-            ax[0][0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
+            ax[0][0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[0][0].set_xlabel('x-position [nm]')
             ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [nm]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist[:,0]), vmax=np.max(dist[:,0]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0][0])
             
-            ax[0][1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap)
+            ax[0][1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[0][1].set_xlabel('x-position [nm]')
             ax[0][1].set_ylabel('y-position [nmn]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist[:,1]), vmax=np.max(dist[:,1]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[0][1])
         
-            ax[1][0].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,0], cmap=cmap)
+            ax[1][0].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][0].set_xlabel('x-position [nm]')
             ax[1][0].set_ylabel('Batch 2\ny-position [nm]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist1[:,0]), vmax=np.max(dist1[:,0]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[1][0])
             
-            ax[1][1].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,1], cmap=cmap)
+            ax[1][1].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][1].set_xlabel('x-position [nm]')
             ax[1][1].set_ylabel('y-position [nm]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist1[:,1]), vmax=np.max(dist1[:,1]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1][1])
             
         else:
+            vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
+            vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
             fig, ax = plt.subplots(1,2)
             ax[0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
             ax[0].set_xlabel('x-position [nm]')
             ax[0].set_ylabel('Batch 1\ny-position [nm]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist[:,0]), vmax=np.max(dist[:,0]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0])
             
             ax[1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap)
             ax[1].set_xlabel('x-position [nm]')
             ax[1].set_ylabel('y-position [nmn]')
-            norm=mpl.colors.Normalize(vmin=np.min(dist[:,1]), vmax=np.max(dist[:,1]), clip=False)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1])
         
         

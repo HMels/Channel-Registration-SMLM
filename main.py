@@ -23,7 +23,14 @@ if False: #% Load Beads
     DS1, DS2 = DS1.SplitDataset()
 
 
-if True: #% Load Excel
+if True: #% Load Beads
+    DS1 = Dataset_hdf5([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
+                        'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
+                       align_rcc=False, subset=.05, coupled=False)
+    DS1, DS2 = DS1.SplitDataset()
+    
+
+if False: #% Load Excel
     DS1 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                         align_rcc=False, coupled=False)
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
@@ -54,7 +61,7 @@ DS1.Transform_Affine()
 
 
 #%% CatmullRomSplines
-DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=1000, edge_grids=2)
+DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=3000, edge_grids=2)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 
@@ -67,7 +74,7 @@ An1.ErrorDistribution(nbins=30)
 
 
 #%% Plotting Channels
-if True:
+if False:
     An1.generate_channel(precision=100)
     #An1.plot_channel()
     An1.plot_1channel()

@@ -17,6 +17,7 @@ class Dataset_excel(AlignModel):
         
         self.imgshape=imgshape
         self.shift_rcc=shift_rcc
+        self.align_rcc=align_rcc
         self.coupled=coupled
         self.ch1, self.ch2 = self.load_dataset(path)
         self.couple_dataset(Filter=False)
@@ -38,10 +39,11 @@ class Dataset_excel(AlignModel):
     
         ch1 = channel(data1, self.imgshape)
         ch2 = channel(data2, self.imgshape)
-        if shift_rcc is None:
-            shift_rcc=ch1.align(ch2)
-            print('Shifted with RCC of', shift_rcc)  
-        ch1.pos += shift_rcc 
+        if self.align_rcc is not False:
+            if shift_rcc is None:
+                shift_rcc=ch1.align(ch2)
+                print('Shifted with RCC of', shift_rcc)  
+            ch1.pos += shift_rcc 
            
         return ch1, ch2
     

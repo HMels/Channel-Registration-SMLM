@@ -24,11 +24,8 @@ class Dataset_hdf5(AlignModel):
         -------
         None.
 
-        '''
-        AlignModel.__init__(self)
-        
+        '''        
         self.shift_rcc=None
-        self.subset=subset
         self.coupled=coupled
         
         '''
@@ -36,7 +33,7 @@ class Dataset_hdf5(AlignModel):
         '''
         
         ## Loading dataset
-        if len(path)==1:
+        if len(path)==1 or isinstance(path,str):
             # Dataset is grouped, meaning it has to be split manually
             print('Loading dataset... \n Grouping...')
             ds = Dataset.load(path[0],saveGroups=True)
@@ -48,33 +45,16 @@ class Dataset_hdf5(AlignModel):
             self.ch1 = Dataset.load(path[0])
             self.ch2 = Dataset.load(path[1])
         else:
-            raise TypeError('Path invalid, should be List of size 1 or 2.')
+            raise TypeError('Path invalid')
         
         
         self.ch2_original=copy.deepcopy(self.ch2)                               # making a copy of the original channel
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
-        if align_rcc: self.align_rcc()                                          # pre-aligning datasets via rcc
-        if self.subset is not None and self.subset!=1:                          # loading a subset of data
-            print('Loading subset of', self.subset)
-            self.ch1, self.ch2 = self.load_subset(self.subset)
-            
+        if align_rcc: self.align_rcc()                                          # pre-aligning datasets via rcc 
+        AlignModel.__init__(self, subset)           
             
           
     #%% Loading the dataset functions
-    def load_subset(self, subset):
-    # loading subset of dataset
-        l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-        r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-        
-        indx1 = np.argwhere( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
-                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]) )[:,0]
-        
-        indx2 = np.argwhere( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
-                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]) )[:,0]
-    
-        return self.ch1.pos[ indx1, : ], self.ch2.pos[ indx2, : ]
-    
-            
     def imgparams(self):
     # calculate borders of system
     # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
