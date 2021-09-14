@@ -6,6 +6,7 @@ Created on Fri Sep 10 15:03:46 2021
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 
 class Analysis:
@@ -142,8 +143,74 @@ class Analysis:
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
             print('The mapped model has an average error of',avg1,'nm')
-            return avg1, fig, (ax1, ax2)        
+            return avg1, fig, (ax1, ax2)
+
+
+    #%% plotting the error in a [x1, x2] plot like in the paper        
+    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
+        ## Coupling Dataset1 if not done already
+        if not self.coupled: 
+            ch11, ch12 = self.couple_dataset(self.ch1, self.ch2, maxDist=maxDist, Filter=True)
+            ch11=self.ch1
+            ch12=self.ch2
+        else:
+            ch11=self.ch1
+            ch12=self.ch2
+        dist = ch11-ch12
+        if dist.shape==(0,): raise ValueError('No neighbours found for channel 1')
+            
+        ## Coupling Dataset2 if not done already
+        if other is not None:
+            if not other.coupled: 
+                ch21, ch22 = other.couple_dataset(other.ch1, other.ch2, maxDist=maxDist, Filter=True)
+            else:
+                ch21=other.ch1
+                ch22=other.ch2
+            dist1 = ch21-ch22
+            if dist1.shape==(0,): raise ValueError('No neighbours found for channel 2')
+            
+            fig, ax = plt.subplots(2,2)
+            ax[0][0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
+            ax[0][0].set_xlabel('x-position [nm]')
+            ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [nm]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist[:,0]), vmax=np.max(dist[:,0]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0][0])
+            
+            ax[0][1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap)
+            ax[0][1].set_xlabel('x-position [nm]')
+            ax[0][1].set_ylabel('y-position [nmn]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist[:,1]), vmax=np.max(dist[:,1]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[0][1])
         
+            ax[1][0].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,0], cmap=cmap)
+            ax[1][0].set_xlabel('x-position [nm]')
+            ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [nm]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist1[:,0]), vmax=np.max(dist1[:,0]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[1][0])
+            
+            ax[1][1].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,1], cmap=cmap)
+            ax[1][1].set_xlabel('x-position [nm]')
+            ax[1][1].set_ylabel('y-position [nm]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist1[:,1]), vmax=np.max(dist1[:,1]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1][1])
+            
+        else:
+            fig, ax = plt.subplots(1,2)
+            ax[0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
+            ax[0].set_xlabel('x-position [nm]')
+            ax[0].set_ylabel('Set 1 Fiducials\ny-position [nm]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist[:,0]), vmax=np.max(dist[:,0]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0])
+            
+            ax[1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap)
+            ax[1].set_xlabel('x-position [nm]')
+            ax[1].set_ylabel('y-position [nmn]')
+            norm=mpl.colors.Normalize(vmin=np.min(dist[:,1]), vmax=np.max(dist[:,1]), clip=False)
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1])
+        
+        
+            
+    
         
     #%% Channel to matrix fn
     def isin_domain(self, pos):

@@ -49,7 +49,7 @@ DS1.Transform_Affine()
 
 
 #%% CatmullRomSplines
-DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=500, edge_grids=2)
+DS1.Train_Splines(lr=1e-2, Nit=1000, gridsize=1000, edge_grids=2)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 
@@ -59,10 +59,10 @@ An1=Analysis(AlignModel=(DS1))
 An1.ErrorPlot()
 
 #%% Plotting Channels
-if False:
+if True:
     An1.generate_channel(precision=100)
-    An1.plot_channel()
-    #An1.plot_1channel()
+    #An1.plot_channel()
+    An1.plot_1channel()
     
 #%% DS2
 if True:
@@ -86,3 +86,5 @@ if True:
     DS2.Filter_Pairs(pair_filter[1])
     An2=Analysis(AlignModel=(DS2))
     An2.ErrorPlot()
+    
+    An1.ErrorPlotImage(An2)
