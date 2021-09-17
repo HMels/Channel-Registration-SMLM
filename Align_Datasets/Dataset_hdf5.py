@@ -50,6 +50,7 @@ class Dataset_hdf5(AlignModel):
         
         self.ch2_original=copy.deepcopy(self.ch2)                               # making a copy of the original channel
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
+        self.center_image()
         if align_rcc: self.align_rcc()                                          # pre-aligning datasets via rcc 
         AlignModel.__init__(self, subset)           
             
@@ -66,6 +67,13 @@ class Dataset_hdf5(AlignModel):
         img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
+    
+    def center_image(self):
+        if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
+        self.ch1.pos -= self.mid
+        self.ch2.pos -= self.mid
+        self.ch2_original.pos -= self.mid
+
     
     def align_rcc(self):
     # align the dataset using a RCC shift

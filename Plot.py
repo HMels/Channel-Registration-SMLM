@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
 """
+Created on Fri Sep 17 10:18:00 2021
+
+@author: Mels
+"""
+# -*- coding: utf-8 -*-
+"""
 Created on Fri Sep 10 15:03:46 2021
 
 @author: Mels
@@ -9,100 +15,98 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 
-class Analysis:
-    def __init__(self, AlignModel=None,ch1=None, ch2=None, ch2_original=None, coupled=False):
-        if AlignModel is None and ch1 is None and ch2 is None: 
-            raise Exception('No Data selected to Analyse, please input the Dataset or the 2 channels (ch1,ch2) seperately!')
-        
-        ## build variables
-        if AlignModel is not None:
-            self.ch1 = AlignModel.ch1.pos
-            self.ch2 = AlignModel.ch2.pos
-            self.ch2_original = AlignModel.ch2_original.pos
-            self.coupled = AlignModel.coupled
-        else:
-            self.ch1=ch1
-            self.ch2=ch2
-            self.ch2_original=ch2_original
-            self.coupled=coupled
-            
+class Plot:
+    def __init__(self):
+        pass
+                        
     
     #%% error_fn
-    def couple_dataset(self, ch1=None, ch2=None, maxDist=50, Filter=True):
+    def couple_dataset(self, pos1=None, pos2=None, maxDist=50, Filter=True):
     # couples dataset with a simple iterative nearest neighbour method
         print('Coupling datasets with an iterative method...')
-        if ch1 is None: 
-            ch1=self.ch1
-            ch2=self.ch2
+        if pos1 is None: 
+            pos1=self.ch1.pos
+            pos2=self.ch2.pos
             
         locsA=[]
         locsB=[]
-        for i in range(ch1.shape[0]):
-            dists = np.sqrt(np.sum((ch1[i,:]-ch2)**2,1))
+        for i in range(pos1.shape[0]):
+            dists = np.sqrt(np.sum((pos1[i,:]-pos2)**2,1))
             if not Filter or np.min(dists)<maxDist:
-                locsA.append( ch1[i,:] )
-                locsB.append( ch2[np.argmin(dists),:] )
+                locsA.append( pos1[i,:] )
+                locsB.append( pos2[np.argmin(dists),:] )
         return np.array(locsA), np.array(locsB)
         
         
-    def ErrorDist(self, ch1, ch2):
+    def ErrorDist(self, pos1, pos2):
     # Generates the error, average and radius
-        dist = np.sqrt( np.sum( ( ch1 - ch2 )**2, axis = 1) )
-        return dist, np.average(dist), np.sqrt(np.sum(ch1**2,1))
-    
+        dist = np.sqrt( np.sum( ( pos1 - pos2 )**2, axis = 1) )
+        return dist, np.average(dist), np.sqrt(np.sum(pos1**2,1))     
+        
+        
+    def imgparams(self):
+    # calculate borders of system
+    # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
+    # the size of the image and a 2-vector containing the middle of the image
+        img = np.empty([2,2], dtype = float)
+        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
+        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
+        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
+        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
+        return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
     
     #%% Plotting the error
     def ErrorPlot(self, nbins=30):
         ## Coupling Datasets if not done already
         if not self.coupled: 
-            ch1, ch2 = self.couple_dataset(self.ch1, self.ch2)
-            if self.ch2_original is not None: 
-                ch1_original, ch2_original = self.couple_dataset(self.ch1, self.ch2_original)
+            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
+            if self.pos2_original is not None: 
+                pos1_original, pos2_original = self.couple_dataset(self.ch1.pos, self.ch2_original.pos)
         else:
-            ch1=self.ch1
-            ch2=self.ch2
-            ch1_original=self.ch1
-            ch2_original=self.ch2_original
+            pos1=self.ch1.pos
+            pos2=self.ch2.pos
+            pos1_original=self.ch1.pos
+            pos2_original=self.ch2_original.pos
             
         
         # Calculating the error
-        dist1, avg1, r1 = self.ErrorDist(ch1, ch2)
-        if self.ch2_original is not None: 
-            dist2, avg2, r2 = self.ErrorDist(ch1_original, ch2_original)
+        dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
+        if self.ch2_original.pos is not None: 
+            dist2, avg2, r2 = self.ErrorDist(pos1_original, pos2_original)
         
         
         ## Plotting
-        if self.ch2_original is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
+        if self.ch2_original.pos is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
         else: fig, (ax1, ax2) = plt.subplots(2)
           
         # plotting the histogram
         n1 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        if self.ch2_original is not None:
+        if self.ch2_original.pos is not None:
             n1 = ax3.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
             n2 = ax3.hist(dist2, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
         else:
             n2=[0]
-        ymax = np.max([np.max(n1[0]), np.max(n2[0])]) + 5
+        ymax = np.max([np.max(n1[0]), np.max(n2[0])])*1.1
             
         # plotting the FOV
         ax2.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
-        if self.ch2_original is not None:
+        if self.ch2_original.pos is not None:
             ax4.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
             ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
             r2=np.array(0)
-        xmax= np.max((np.max(r1),np.max(r2)))+5
+        xmax= np.max((np.max(r1),np.max(r2)))*1.1
         
         # Plotting the averages as vlines
         ax1.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
-        if self.ch2_original is not None:
+        if self.ch2_original.pos is not None:
             ax3.vlines(avg2, color='purple', ymin=0, ymax=ymax, label=('avg original = '+str(round(avg2,2))))
             ax3.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
           
         # Plotting the averages as hlines
         ax2.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
-        if self.ch2_original is not None:
+        if self.ch2_original.pos is not None:
             ax4.hlines(avg2, color='purple', xmin=0, xmax=xmax, label=('average original = '+str(round(avg2,2))))
             ax4.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
         
@@ -122,7 +126,7 @@ class Analysis:
         ax2.set_ylabel('Absolute Error')
         ax2.legend()
         
-        if self.ch2_original is not None:
+        if self.ch2_original.pos is not None:
             ax3.set_title('Comparisson')
             ax3.set_ylim([0,ymax])
             ax3.set_xlim(0)
@@ -136,9 +140,10 @@ class Analysis:
             ax4.set_xlabel('FOV [nm]')
             ax4.set_ylabel('Absolute Error')
             ax4.legend()
-           
+          
+        fig.tight_layout()
         fig.show()
-        if self.ch2_original is not None: 
+        if self.ch2_original.pos is not None: 
             print('The original model had an average error of',avg2,'nm\nThe mapped model has an average error of',avg1,'nm')
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
@@ -149,44 +154,86 @@ class Analysis:
     def ErrorDistribution(self, nbins=30):
     # just plots the error distribution after mapping
         if not self.coupled: 
-            ch1, ch2 = self.couple_dataset(self.ch1, self.ch2)
+            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
         else:
-            ch1=self.ch1
-            ch2=self.ch2
-        dist1, avg1, r1 = self.ErrorDist(ch1, ch2)
+            pos1=self.ch1.pos
+            pos2=self.ch2.pos
+        dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
         
         plt.figure()
         n1 = plt.hist(dist1, label=('Mapped Error = '+str(round(avg1,2))+'nm'), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        ymax = np.max(n1[0]) + 5
-        plt.title('Zoomed in on Mapping Error')
+        ymax = np.max(n1[0]*1.1)
+        #plt.title('Zoomed in on Mapping Error')
         plt.ylim([0,ymax])
         plt.xlim(0)
         plt.xlabel('distance [nm]')
         plt.ylabel('# of localizations')
         plt.legend()
+        plt.tight_layout()
+        
+        
+    def ErrorDistribution_xy(self, nbins=30):
+        if not self.coupled: 
+            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
+        else:
+            pos1=self.ch1.pos
+            pos2=self.ch2.pos
+            
+        
+        distx=pos1[:,0]-pos2[:,0]
+        avgx = np.average(distx)
+        stdx = np.std(distx)
+        disty=pos1[:,1]-pos2[:,1]
+        avgy = np.average(disty)
+        stdy = np.std(disty)
+            
+        fig, ax = plt.subplots(1,2,figsize=(12,6))
+        
+        nx = ax[0].hist(distx, label=(r'$\mu$ = '+str(round(avgx,2))+'nm, $\sigma$ = '+str(round(stdx,2))+'nm'),
+                        alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        ny = ax[1].hist(disty, label=(r'$\mu$ = '+str(round(avgy,2))+'nm, $\sigma$ = '+str(round(stdy,2))+'nm'),
+                        alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        
+        ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
+        ax[0].set_ylim([0,ymax])
+        ax[0].set_xlim(-31,31)
+        ax[0].set_xlabel('x-distance [nm]')
+        ax[0].set_ylabel('# of localizations')
+        ax[0].legend()
+        
+        ax[1].set_ylim([0,ymax])
+        ax[1].set_xlim(-31,31)
+        ax[1].set_xlabel('y-distance [nm]')
+        ax[1].set_ylabel('# of localizations')
+        ax[1].legend()
+        fig.tight_layout()
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
     def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
         ## Coupling Dataset1 if not done already
         if not self.coupled: 
-            ch11, ch12 = self.couple_dataset(self.ch1, self.ch2, maxDist=maxDist, Filter=True)
-            ch11=self.ch1
-            ch12=self.ch2
+            pos11, pos12 = self.couple_dataset(self.ch1.pos, self.ch2.pos, maxDist=maxDist, Filter=True)
+            pos11=self.ch1.pos
+            pos22=self.ch2.pos
         else:
-            ch11=self.ch1
-            ch12=self.ch2
-        dist = ch11-ch12
+            pos11=self.ch1.pos
+            pos12=self.ch2.pos
+        dist = pos11-pos12
+        pos11 = pos11/1000 # to micrometer
+        pos12 = pos12/1000
         if dist.shape==(0,): raise ValueError('No neighbours found for channel 1')
             
         ## Coupling Dataset2 if not done already
         if other is not None:
             if not other.coupled: 
-                ch21, ch22 = other.couple_dataset(other.ch1, other.ch2, maxDist=maxDist, Filter=True)
+                pos21, pos22 = other.couple_dataset(other.ch1.pos, other.ch2.pos, maxDist=maxDist, Filter=True)
             else:
-                ch21=other.ch1
-                ch22=other.ch2
-            dist1 = ch21-ch22
+                pos21=other.ch1.pos
+                pos22=other.ch2.pos
+            dist1 = pos21-pos22
+            pos21 = pos21/1000
+            pos22 = pos22/1000
             if dist1.shape==(0,): raise ValueError('No neighbours found for channel 2')
             
             vmin=np.min((np.min(dist[:,0]),np.min(dist1[:,0]),np.min(dist[:,1]),np.min(dist1[:,1])))
@@ -194,45 +241,53 @@ class Analysis:
             
             
             fig, ax = plt.subplots(2,2)
-            ax[0][0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax[0][0].set_xlabel('x-position [nm]')
-            ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [nm]')
+            ax[0][0].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
+            #ax[0][0].set_xlabel('x-position [\u03bcm]')
+            ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0][0])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[0][0])
+            ax[0][0].set_aspect('equal', 'box')
             
-            ax[0][1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax[0][1].set_xlabel('x-position [nm]')
-            ax[0][1].set_ylabel('y-position [nmn]')
+            ax[0][1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
+            #ax[0][1].set_xlabel('x-position [\u03bcm]')
+            #ax[0][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[0][1])
+            ax[0][1].set_aspect('equal', 'box')
         
-            ax[1][0].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax[1][0].set_xlabel('x-position [nm]')
-            ax[1][0].set_ylabel('Batch 2\ny-position [nm]')
+            ax[1][0].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[1][0].set_xlabel('x-position [\u03bcm]')
+            ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[1][0])
+            ax[1][0].set_aspect('equal', 'box')
             
-            ax[1][1].scatter(ch21[:,0], ch21[:,1], s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax[1][1].set_xlabel('x-position [nm]')
-            ax[1][1].set_ylabel('y-position [nm]')
+            ax[1][1].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[1][1].set_xlabel('x-position [\u03bcm]')
+            #ax[1][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1][1])
+            ax[1][1].set_aspect('equal', 'box')
+            fig.tight_layout()
             
         else:
             vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
             fig, ax = plt.subplots(1,2)
-            ax[0].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,0], cmap=cmap)
-            ax[0].set_xlabel('x-position [nm]')
-            ax[0].set_ylabel('Batch 1\ny-position [nm]')
+            ax[0].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,0], cmap=cmap)
+            ax[0].set_xlabel('x-position [\u03bcm]')
+            ax[0].set_ylabel('Batch 1\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nmn]', ax=ax[0])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[0])
+            ax[0].set_aspect('equal', 'box')
             
-            ax[1].scatter(ch11[:,0], ch11[:,1], s=ps, c=dist[:,1], cmap=cmap)
-            ax[1].set_xlabel('x-position [nm]')
-            ax[1].set_ylabel('y-position [nmn]')
+            ax[1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap)
+            ax[1].set_xlabel('x-position [\u03bcm]')
+            ax[1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1])
+            ax[1].set_aspect('equal', 'box')
+            fig.tight_layout()
         
         
             
@@ -250,9 +305,9 @@ class Analysis:
         print('Generating Channels as matrix')       
     
         # normalizing system
-        locs1 = self.ch1  / precision
-        locs2 = self.ch2  / precision
-        if self.ch2_original is not None: locs2_original = self.ch2_original  / precision
+        locs1 = self.ch1.pos  / precision
+        locs2 = self.ch2.pos  / precision
+        if self.ch2_original.pos is not None: locs2_original = self.ch2_original.pos  / precision
         else: locs2_original=locs2
         
         # calculate bounds of the system
@@ -269,7 +324,7 @@ class Analysis:
         # generating the matrices to be plotted
         self.channel1 = self.generate_matrix(locs1)
         self.channel2 = self.generate_matrix(locs2)
-        if self.ch2_original is not None: self.channel2_original = self.generate_matrix(locs2_original)
+        if self.ch2_original.pos is not None: self.channel2_original = self.generate_matrix(locs2_original)
         
         
     def generate_matrix(self, locs):
@@ -289,26 +344,29 @@ class Analysis:
         
         # plotting all channels
         plt.figure()
-        if self.ch2_original is not None: plt.subplot(131)
+        if self.ch2_original.pos is not None: plt.subplot(131)
         else: plt.subplot(121)
         plt.imshow(self.channel1, extent = self.axis)
         plt.xlabel('x2')
         plt.ylabel('x1')
         plt.title('original channel 1')
+        plt.tight_layout()
         
-        if self.ch2_original is not None: plt.subplot(132)
+        if self.ch2_original.pos is not None: plt.subplot(132)
         else: plt.subplot(122)
         plt.imshow(self.channel2, extent = self.axis)
         plt.xlabel('x2')
         plt.ylabel('x1')
         plt.title('mapped channel 2')
+        plt.tight_layout()
         
-        if self.ch2_original is not None: 
+        if self.ch2_original.pos is not None: 
             plt.subplot(133)
             plt.imshow(self.channel2_original, extent = self.axis)
             plt.xlabel('x2')
             plt.ylabel('x1')
             plt.title('original channel 2')
+            plt.tight_layout()
         
         
     def plot_1channel(self, channel1=None):
@@ -319,3 +377,4 @@ class Analysis:
         plt.xlabel('x1')
         plt.ylabel('x2')
         plt.title('Single Channel view')
+        plt.tight_layout()

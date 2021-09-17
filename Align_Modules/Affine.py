@@ -59,3 +59,5 @@ class AffineModel(tf.keras.Model):
         x1 = ch2_mapped[:,0]*self.A[0,0] + ch2_mapped[:,1]*self.A[0,1]
         x2 = ch2_mapped[:,0]*self.A[1,0] + ch2_mapped[:,1]*self.A[1,1]
         return tf.stack([x1, x2], axis =1 )    
+    
+    

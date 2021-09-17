@@ -50,7 +50,7 @@ class RigidBodyModel(tf.keras.Model):
         ch2_mapped = ch2 + self.d[None,None] 
         
         ## Rotate
-        sin = tf.sqrt(1-tf.pow(self.cos, 2))
+        #sin = tf.sqrt(1-tf.pow(self.cos, 2))
         x1 = ch2_mapped[:,:,0]*self.cos #- ch2_mapped[:,:,1]*sin
         x2 = ch2_mapped[:,:,1]*self.cos #+ ch2_mapped[:,:,0]*sin
         return tf.stack([x1, x2], axis =2 )
@@ -62,7 +62,7 @@ class RigidBodyModel(tf.keras.Model):
         ch2_mapped = ch2 + self.d[None]
         
         ## Rotate
-        sin = tf.sqrt(1-tf.pow(self.cos, 2))
+        #sin = tf.sqrt(1-tf.pow(self.cos, 2))
         x1 = ch2_mapped[:,0]*self.cos #- ch2_mapped[:,1]*sin
         x2 = ch2_mapped[:,1]*self.cos #+ ch2_mapped[:,0]*sin 
         return tf.stack([x1, x2], axis =1 )

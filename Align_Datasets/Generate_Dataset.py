@@ -20,6 +20,7 @@ class Generate_Dataset(AlignModel):
         AlignModel.__init__(self)
         self.imgshape=np.array(imgshape)
         self.coupled=coupled
+        self.center_image()
         self.deform = Deform(deform_on, shift, rotation, shear, scaling, random_deform)
         
     
@@ -72,6 +73,14 @@ class Generate_Dataset(AlignModel):
         img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
         img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2    
+    
+    
+    def center_image(self):
+        if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
+        self.ch1.pos -= self.mid
+        self.ch2.pos -= self.mid
+        self.ch2_original.pos -= self.mid
+        self.img, self.imgsize, self.mid = self.imgparams() 
     
         
         

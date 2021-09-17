@@ -12,9 +12,7 @@ from Align_Datasets.channel_class import channel
 
 class Dataset_excel(AlignModel):
     def __init__(self, path, align_rcc=True, coupled=False, 
-                 imgshape=[512, 512], shift_rcc=None):
-        AlignModel.__init__(self)
-        
+                 imgshape=[512, 512], shift_rcc=None, subset=None):
         self.imgshape=imgshape
         self.shift_rcc=shift_rcc
         self.align_rcc=align_rcc
@@ -23,6 +21,8 @@ class Dataset_excel(AlignModel):
         self.couple_dataset(Filter=False)
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
+        self.center_image()
+        AlignModel.__init__(self, subset)
         
         
     #%% functions
@@ -79,5 +79,11 @@ class Dataset_excel(AlignModel):
         img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
         img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
-
-
+    
+    
+    def center_image(self):
+        if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
+        self.ch1.pos -= self.mid
+        self.ch2.pos -= self.mid
+        self.ch2_original.pos -= self.mid
+        self.img, self.imgsize, self.mid = self.imgparams() 
