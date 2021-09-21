@@ -17,10 +17,9 @@ class Generate_Dataset(AlignModel):
     def __init__(self, coupled=False, imgshape=[512, 512], deform_on=True, 
                  shift=np.array([20,20]), rotation=0.2, shear=np.array([0.003,0.002]), 
                  scaling=np.array([1.0004,1.0003]), random_deform=False):
-        AlignModel.__init__(self)
+        AlignModel.__init__(self, subset=1)
         self.imgshape=np.array(imgshape)
         self.coupled=coupled
-        self.center_image()
         self.deform = Deform(deform_on, shift, rotation, shear, scaling, random_deform)
         
     
@@ -41,6 +40,7 @@ class Generate_Dataset(AlignModel):
         # Copy channel and generate noise
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams() 
+        self.center_image()
         
         
     def generate_dataset_clusters(self, Nclust=650, N_per_clust=250, std_clust=7,
@@ -60,6 +60,8 @@ class Generate_Dataset(AlignModel):
         # Copy channel and generate noise
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams() 
+        self.center_image()
+        
     
     
     #% functions
@@ -76,7 +78,12 @@ class Generate_Dataset(AlignModel):
     
     
     def center_image(self):
-        if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
+        try:
+            if self.mid is None:
+                self.img, self.imgsize, self.mid = self.imgparams()
+        except:
+            self.img, self.imgsize, self.mid = self.imgparams()
+        
         self.ch1.pos -= self.mid
         self.ch2.pos -= self.mid
         self.ch2_original.pos -= self.mid
@@ -88,13 +95,14 @@ class Generate_Dataset(AlignModel):
 class channel_beads:
     def __init__(self, N, imgshape=[512, 512], error=10, noise=.005):
         self.imgshape=np.array(imgshape, dtype=np.float32)
-        self.pos = self.imgshape * rnd.rand(N,2) - (self.imgshape/2).astype('int')
+        self.pos = np.float32( self.imgshape * rnd.rand(N,2) - (self.imgshape/2) )
         self.N = N
-        self._xyI = np.ones(N, dtype=np.float32)
         self.error = error                                          # localization error
         self.noise = noise                                          # amount of noise
         self.img, self.imgsize, self.mid = self.imgparams()         # image parameters for a single channel
-        
+      
+    def _xyI(self):
+        return np.ones((self.N,1))
     
     #% miscalleneous functions
     def generate_locerror(self):
@@ -109,13 +117,12 @@ class channel_beads:
         if self.noise!=0:
             self.N_noise = int(self.noise * self.N)
             Nlocs = np.array([
-                self.imgsize[0] * rnd.rand( self.N_noise ) - self.mid[0] ,
-                self.imgsize[1] * rnd.rand( self.N_noise ) - self.mid[0]
+                np.float32( self.imgsize[0] * rnd.rand( self.N_noise ) - self.mid[0] ),
+                np.float32(self.imgsize[1] * rnd.rand( self.N_noise ) - self.mid[0] )
                 ])
             
             self.pos = np.append(self.pos, ( Nlocs.transpose() ), 0)
             self.N = self.pos.shape[0]
-            self._xyI = np.ones(self.N, dtype=np.float32)
         
         
     def imgparams(self):
@@ -134,7 +141,7 @@ class channel_clusters:
     def __init__(self, Nclust=650, std_clust=7, N_per_clust=250,
                  imgshape=[512, 512], error=10, noise=.005):
         self.imgshape=np.array(imgshape, dtype=np.float32)
-        self.clust_locs = self.imgshape * rnd.rand(Nclust,2) - (self.imgshape/2).astype('int')
+        self.clust_locs = np.float32( self.imgshape * rnd.rand(Nclust,2) - (self.imgshape/2))
         self.Nclust = Nclust
         self.std_clust=std_clust
         self.N_per_clust=N_per_clust
@@ -143,9 +150,10 @@ class channel_clusters:
         
         self.pos = self.generate_cluster_pos()
         self.N = self.pos.shape[0]
-        self._xyI = np.ones(self.N, dtype=np.float32)
         self.img, self.imgsize, self.mid = self.imgparams()         # image parameters for a single channel
         
+    def _xyI(self):
+        return np.ones((self.N,1))
     
     #% miscalleneous functions
     def generate_locerror(self):
@@ -160,13 +168,12 @@ class channel_clusters:
         if self.noise!=0:
             self.N_noise = int(self.noise * self.N)
             Nlocs = np.array([
-                self.imgsize[0] * rnd.rand( self.N_noise ) - self.mid[0] ,
-                self.imgsize[1] * rnd.rand( self.N_noise ) - self.mid[0]
+                np.float32( self.imgsize[0] * rnd.rand( self.N_noise ) - self.mid[0] ),
+                np.float32( self.imgsize[1] * rnd.rand( self.N_noise ) - self.mid[0] )
                 ])
             
             self.pos = np.append(self.pos, ( Nlocs.transpose() ), 0)
             self.N = self.pos.shape[0]
-            self._xyI = np.ones(self.N, dtype=np.float32)
         
         
     def imgparams(self):
@@ -201,8 +208,8 @@ class channel_clusters:
         locs = np.concatenate(locs, axis=0)   # add all points together
         
         ## Fit every point inside image
-        locs[:,0] = (locs[:,0]+(self.imgshape[0]/2).astype('int'))%self.imgshape[0] - (self.imgshape/2).astype('int')[0]
-        locs[:,1] = (locs[:,1]+(self.imgshape[1]/2).astype('int'))%self.imgshape[1] - (self.imgshape/2).astype('int')[1]
+        locs[:,0] = np.float32( (locs[:,0]+(self.imgshape[0]/2))%self.imgshape[0] - (self.imgshape/2)[0])
+        locs[:,1] = np.float32( (locs[:,1]+(self.imgshape[1]/2))%self.imgshape[1] - (self.imgshape/2)[1])
         return locs
         
     
@@ -222,8 +229,8 @@ class channel_clusters:
         Nx2 float Array
             The [x1,x2] localizations .
         '''
-        x1 = rnd.normal(mu[0], sigma[0], N)
-        x2 = rnd.normal(mu[1], sigma[1], N)
+        x1 = np.float32( rnd.normal(mu[0], sigma[0], N) )
+        x2 = np.float32( rnd.normal(mu[1], sigma[1], N) )
         return np.array([x1, x2]).transpose()
     
     

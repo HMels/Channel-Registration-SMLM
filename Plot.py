@@ -60,9 +60,7 @@ class Plot:
     def ErrorPlot(self, nbins=30):
         ## Coupling Datasets if not done already
         if not self.coupled: 
-            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
-            if self.pos2_original is not None: 
-                pos1_original, pos2_original = self.couple_dataset(self.ch1.pos, self.ch2_original.pos)
+            pos1_original, pos2_original = self.couple_dataset()
         else:
             pos1=self.ch1.pos
             pos2=self.ch2.pos
@@ -115,7 +113,7 @@ class Plot:
         ax1.set_title('Zoomed in on Mapping Error')
         ax1.set_ylim([0,ymax])
         ax1.set_xlim(0)
-        ax1.set_xlabel('distance [nm]')
+        ax1.set_xlabel('Absolute error [nm]')
         ax1.set_ylabel('# of localizations')
         ax1.legend()
         
@@ -130,7 +128,7 @@ class Plot:
             ax3.set_title('Comparisson')
             ax3.set_ylim([0,ymax])
             ax3.set_xlim(0)
-            ax3.set_xlabel('distance [nm]')
+            ax3.set_xlabel('Absolute error [nm]')
             ax3.set_ylabel('# of localizations')
             ax3.legend()
         
@@ -144,10 +142,10 @@ class Plot:
         fig.tight_layout()
         fig.show()
         if self.ch2_original.pos is not None: 
-            print('The original model had an average error of',avg2,'nm\nThe mapped model has an average error of',avg1,'nm')
+            print('The original model had an average absolute error of',avg2,'nm\nThe mapped model has an average absolute error of',avg1,'nm')
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
-            print('The mapped model has an average error of',avg1,'nm')
+            print('The mapped model has an average absolute error of',avg1,'nm')
             return avg1, fig, (ax1, ax2)
 
 
@@ -166,7 +164,7 @@ class Plot:
         #plt.title('Zoomed in on Mapping Error')
         plt.ylim([0,ymax])
         plt.xlim(0)
-        plt.xlabel('distance [nm]')
+        plt.xlabel('error [nm]')
         plt.ylabel('# of localizations')
         plt.legend()
         plt.tight_layout()
@@ -197,13 +195,13 @@ class Plot:
         ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
         ax[0].set_ylim([0,ymax])
         ax[0].set_xlim(-31,31)
-        ax[0].set_xlabel('x-distance [nm]')
+        ax[0].set_xlabel('x-error [nm]')
         ax[0].set_ylabel('# of localizations')
         ax[0].legend()
         
         ax[1].set_ylim([0,ymax])
         ax[1].set_xlim(-31,31)
-        ax[1].set_xlabel('y-distance [nm]')
+        ax[1].set_xlabel('y-error [nm]')
         ax[1].set_ylabel('# of localizations')
         ax[1].legend()
         fig.tight_layout()
@@ -245,28 +243,28 @@ class Plot:
             #ax[0][0].set_xlabel('x-position [\u03bcm]')
             ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[0][0])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0][0])
             ax[0][0].set_aspect('equal', 'box')
             
             ax[0][1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             #ax[0][1].set_xlabel('x-position [\u03bcm]')
             #ax[0][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[0][1])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[0][1])
             ax[0][1].set_aspect('equal', 'box')
         
             ax[1][0].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][0].set_xlabel('x-position [\u03bcm]')
             ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[1][0])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[1][0])
             ax[1][0].set_aspect('equal', 'box')
             
             ax[1][1].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][1].set_xlabel('x-position [\u03bcm]')
             #ax[1][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1][1])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[1][1])
             ax[1][1].set_aspect('equal', 'box')
             fig.tight_layout()
             
@@ -278,14 +276,14 @@ class Plot:
             ax[0].set_xlabel('x-position [\u03bcm]')
             ax[0].set_ylabel('Batch 1\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-offset [nm]', ax=ax[0])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0])
             ax[0].set_aspect('equal', 'box')
             
             ax[1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap)
             ax[1].set_xlabel('x-position [\u03bcm]')
             ax[1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-offset [nm]', ax=ax[1])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[1])
             ax[1].set_aspect('equal', 'box')
             fig.tight_layout()
         

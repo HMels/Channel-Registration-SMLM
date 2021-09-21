@@ -73,6 +73,7 @@ class Dataset_hdf5(AlignModel):
         self.ch1.pos -= self.mid
         self.ch2.pos -= self.mid
         self.ch2_original.pos -= self.mid
+        self.img, self.imgsize, self.mid = self.imgparams() 
 
     
     def align_rcc(self):

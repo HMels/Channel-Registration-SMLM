@@ -39,7 +39,6 @@ class RigidBodyModel(tf.keras.Model):
             ch2_mapped = self.transform_vec(ch2)
             return tf.reduce_sum(tf.square(ch1-ch2_mapped)) 
         else:
-            # 
             ch2_mapped = self.transform_mat(ch2)
             return Rel_entropy(ch1, ch2_mapped)
     

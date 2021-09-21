@@ -25,7 +25,7 @@ class ShiftModel(tf.keras.Model):
         The relative entropy of the current mapping
         
     '''
-    def __init__(self, direct=False, name='shift'):
+    def __init__(self, direct=False, Neighbours=False, name='shift'):
         super().__init__(name=name)
         self.direct=tf.Variable(direct, dtype=bool, trainable=False) # is the dataset coupled
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
@@ -36,7 +36,6 @@ class ShiftModel(tf.keras.Model):
             ch2_mapped = self.transform_vec(ch2)
             return tf.reduce_sum(tf.square(ch1-ch2_mapped)) 
         else:
-            # 
             ch2_mapped = self.transform_mat(ch2)
             return Rel_entropy(ch1, ch2_mapped)
     

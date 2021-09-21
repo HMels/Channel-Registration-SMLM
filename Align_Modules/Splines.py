@@ -15,7 +15,7 @@ class SplinesModel(tf.keras.Model):
     - gives it a shift and rotation deformation
     - calculates the relative entropy via Rel_entropy()    
     '''
-    def __init__(self, CP_locs, CP_idx, CP_idx_nn=None, direct=False, name='CatmullRomSplines'):
+    def __init__(self, CP_locs, CP_idx, CP_idx_NN=None, direct=False, name='CatmullRomSplines'):
         super().__init__(name=name)
         self.direct=direct
         # The location of the ControlPoints. This will be trained
@@ -33,9 +33,8 @@ class SplinesModel(tf.keras.Model):
         # The indices of which locs in ch2 belong to which CP_locs
         self.CP_idx = tf.Variable(CP_idx, dtype=tf.int32,
                                   trainable=False, name='ControlPointsIdx')
-        self.CP_idx_nn = (tf.Variable(CP_idx_nn, dtype=tf.int32,
-                                  trainable=False, name='ControlPointsIdx')
-                          if CP_idx_nn is not None else {})
+        self.CP_idx_NN = tf.Variable(CP_idx_NN, dtype=tf.int32,
+                                  trainable=False, name='ControlPointsIdx') if CP_idx_NN is not None else {}
         
         self.A = tf.Variable([
             [-.5, 1.5, -1.5, 0.5],
@@ -91,7 +90,7 @@ class SplinesModel(tf.keras.Model):
     @tf.autograph.experimental.do_not_convert
     def transform_mat(self, x_input):
         self.load_CPlocs()
-        self.update_splines(self.CP_idx_nn)        
+        self.update_splines(self.CP_idx_NN)        
         x = x_input[:,:,0][:,:,None]%1
         y = x_input[:,:,1][:,:,None]%1
         
@@ -183,13 +182,13 @@ class SplinesModel(tf.keras.Model):
         self.q33 = tf.gather_nd(self.CP_locs, idx+[2,2])  # q_k
         
         
-    def reset_CP(self, CP_idx, CP_idx_nn=None):
+    def reset_CP(self, CP_idx, CP_idx_NN=None):
         # The indices of which locs in ch2 belong to which CP_locs
         self.CP_idx = tf.Variable(CP_idx, dtype=tf.int32,
                                   trainable=False, name='ControlPointsIdx')
-        self.CP_idx_nn = (tf.Variable(CP_idx_nn, dtype=tf.int32,
+        self.CP_idx_NN = (tf.Variable(CP_idx_NN, dtype=tf.int32,
                                   trainable=False, name='ControlPointsIdx')
-                          if CP_idx_nn is not None else {})
+                          if CP_idx_NN is not None else {})
         
         
     
