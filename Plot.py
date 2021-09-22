@@ -62,11 +62,10 @@ class Plot:
         if not self.coupled: 
             pos1_original, pos2_original = self.couple_dataset()
         else:
-            pos1=self.ch1.pos
-            pos2=self.ch2.pos
             pos1_original=self.ch1.pos
             pos2_original=self.ch2_original.pos
-            
+        pos1=self.ch1.pos
+        pos2=self.ch2.pos
         
         # Calculating the error
         dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
@@ -315,7 +314,7 @@ class Plot:
         self.bounds[0,1] = np.max([ np.max(locs1[:,0]), np.max(locs2[:,0]), np.max(locs2_original[:,0]) ])
         self.bounds[1,0] = np.min([ np.min(locs1[:,1]), np.min(locs2[:,1]), np.min(locs2_original[:,1]) ])
         self.bounds[1,1] = np.max([ np.max(locs1[:,1]), np.max(locs2[:,1]), np.max(locs2_original[:,1]) ])
-        self.size_img = np.round( (self.bounds[:,1] - self.bounds[:,0]) , 0).astype('int')           
+        self.size_img = np.abs(np.round( (self.bounds[:,1] - self.bounds[:,0]) , 0).astype('int')    )        
         self.axis = np.array([ self.bounds[1,:], self.bounds[0,:]]) * self.precision
         self.axis = np.reshape(self.axis, [1,4])[0]
         

@@ -97,19 +97,6 @@ class AlignModel(Plot):
     def couple_dataset(self, maxDist=150, Filter=False):
     # couples dataset with a simple iterative nearest neighbour method
         print('Coupling datasets with an iterative method...')
-        locsA=[]
-        locsB=[]
-        for i in range(self.ch1.pos.shape[0]):
-            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
-            if not Filter or np.min(dists)<maxDist:
-                locsA.append( self.ch1.pos[i,:] )
-                locsB.append( self.ch2.pos[np.argmin(dists),:] ) 
-                        
-        # initialize the new coupled dataset
-        self.ch1.pos = np.array(locsA, dtype=np.float32)
-        self.ch2.pos = np.array(locsB, dtype=np.float32)
-        self.coupled = True
-        
         (locsA_original, locsB_original) = ([],[])
         if self.ch2_original is not None: 
             for i in range(self.ch1.pos.shape[0]):
@@ -122,6 +109,19 @@ class AlignModel(Plot):
         else:
             ch1_original = None
             ch2_original = None
+        
+        (locsA, locsB)=([],[])
+        for i in range(self.ch1.pos.shape[0]):
+            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
+            if not Filter or np.min(dists)<maxDist:
+                locsA.append( self.ch1.pos[i,:] )
+                locsB.append( self.ch2.pos[np.argmin(dists),:] ) 
+                        
+        # initialize the new coupled dataset
+        self.ch1.pos = np.array(locsA, dtype=np.float32)
+        self.ch2.pos = np.array(locsB, dtype=np.float32)
+        self.coupled = True
+        
         return ch1_original, ch2_original
         
         
@@ -335,6 +335,7 @@ class AlignModel(Plot):
         ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
         ch2_tf=self.ShiftModel.transform_vec(ch2_tf)
         self.ch2.pos=np.array(ch2_tf.numpy())
+        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
         self.dev_mode('Shift')
     
     
@@ -359,6 +360,7 @@ class AlignModel(Plot):
         ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
         ch2_tf=self.RigidBodyModel.transform_vec(ch2_tf)
         self.ch2.pos=np.array(ch2_tf.numpy())
+        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
         self.dev_mode('Rigid Body')
         
         
@@ -391,6 +393,7 @@ class AlignModel(Plot):
         ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
         ch2_tf=self.AffineModel.transform_vec(ch2_tf)
         self.ch2.pos=np.array(ch2_tf.numpy())
+        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
         self.dev_mode('Affine')
       
         
@@ -413,6 +416,7 @@ class AlignModel(Plot):
         ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
         ch2_tf=self.Polynomial3Model.transform_vec(ch2_tf)
         self.ch2.pos=np.array(ch2_tf.numpy())
+        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
         self.dev_mode('Polynomial-3')
         
      
@@ -425,9 +429,7 @@ class AlignModel(Plot):
         # normalize dataset and generate or import parameters
         ch2_input = tf.Variable(self.ch2.pos / gridsize)
         ch1_input = tf.Variable(self.ch1.pos / gridsize)
-        if self.NN1 is not None:
-            NN2_input = tf.Variable(self.NN2 / gridsize)
-            NN1_input = tf.Variable(self.NN1 / gridsize)
+        if self.NN2 is not None: NN2_input = tf.Variable(self.NN2 / gridsize)
         self.gridsize = gridsize
         if sys_param is None:
             self.x1_min = tf.reduce_min(tf.floor(ch2_input[:,0]))
@@ -445,7 +447,13 @@ class AlignModel(Plot):
         # generating the grid
         x1_grid = tf.range(self.x1_min-self.edge_grids, self.x1_max+self.edge_grids+2, 1, dtype=tf.float32)
         x2_grid = tf.range(self.x2_min-self.edge_grids, self.x2_max+self.edge_grids+2, 1, dtype=tf.float32)
-        self.CP_locs = tf.cast(tf.transpose(tf.stack(tf.meshgrid(x1_grid,x2_grid), axis=2), [1,0,2]), dtype=tf.float32)
+        self.CP_locs = tf.cast(
+            tf.transpose(
+                tf.stack(
+                    tf.meshgrid(x1_grid,x2_grid),
+                    axis=2),
+                [1,0,2]), 
+            dtype=tf.float32)
         
         # initializing the indexes of ch2
         self.CP_idx = tf.cast(tf.stack(
@@ -507,6 +515,7 @@ class AlignModel(Plot):
         # transform the new ch2 model
         ch2_tf=self.SplinesModel.transform_vec(ch2_tf) * self.gridsize
         self.ch2.pos=np.array(ch2_tf.numpy())
+        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
         self.dev_mode('Splines')
         
         

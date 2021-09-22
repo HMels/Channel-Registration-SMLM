@@ -265,8 +265,8 @@ class Deform():
         if random_deform:
             self.shift = np.array([ 20  , 20 ]) + 10*rnd.randn(2)       
             self.rotation = 0.2*rnd.randn(1)
-            self.shear=np.array([0.003, 0.002])  + 0.001*rnd.randn(2)
-            self.scaling=np.array([1.0004,1.0003 ])+ 0.0001*rnd.randn(2)
+            self.shear=np.array([0,0])#np.array([0.003, 0.002])  + 0.001*rnd.randn(2)
+            self.scaling=np.array([1,1])#np.array([1.0004,1.0003 ])+ 0.0001*rnd.randn(2)
         else:
             self.shift = shift if shift is not None else np.array([0.,0.])
             self.rotation = rotation if rotation is not None else 0.
