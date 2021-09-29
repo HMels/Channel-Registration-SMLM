@@ -37,7 +37,7 @@ def ErrorDistribution(pair, nbins=30):
     plt.tight_layout()
     
     
-def ErrorDistribution_xy(pair, nbins=30):
+def ErrorDistribution_xy(pair, nbins=30, xlim=31):
     fig, ax = plt.subplots(1,2,figsize=(12,6))
     distx=pair[:,0]-pair[:,2]
     avgx = np.average(distx)
@@ -53,13 +53,13 @@ def ErrorDistribution_xy(pair, nbins=30):
     
     ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
     ax[0].set_ylim([0,ymax])
-    ax[0].set_xlim(-31,31)
+    ax[0].set_xlim(-xlim,xlim)
     ax[0].set_xlabel('x-error [nm]')
     ax[0].set_ylabel('# of localizations')
     ax[0].legend()
     
     ax[1].set_ylim([0,ymax])
-    ax[1].set_xlim(-31,31)
+    ax[1].set_xlim(-xlim,xlim)
     ax[1].set_xlabel('y-error [nm]')
     ax[1].set_ylabel('# of localizations')
     ax[1].legend()
@@ -111,22 +111,23 @@ def ErrorPlotImage(pair, pair1, maxDist=30, ps=5, cmap='seismic'):
     
 #%% Loading Dataset
 
-fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs_NoLocal.csv')
-fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs_NoLocal.csv')
+#fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs_NoLocal.csv')
+#fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs_NoLocal.csv')
 
-#fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs.csv')
-#fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs.csv')
+fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs.csv')
+fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs.csv')
 
 
 #%% output
 plt.close('all')
 nbins=100
+xlim=31
 
 ## DS1
-ErrorDistribution_xy(fiducials1, nbins=nbins)
+ErrorDistribution_xy(fiducials1, nbins=nbins, xlim=xlim)
 
 ## DS2
-ErrorDistribution_xy(fiducials2, nbins=nbins)
+ErrorDistribution_xy(fiducials2, nbins=nbins, xlim=xlim)
 
 ## DS1 vs DS2
 ErrorPlotImage(fiducials1, fiducials2)

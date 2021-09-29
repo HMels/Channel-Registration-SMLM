@@ -38,7 +38,7 @@ def Rel_entropy(ch1,ch2):
 
 
 @tf.autograph.experimental.do_not_convert
-def KL_divergence(ch1, ch2, CRLB = 1):
+def KL_divergence(ch1, ch2, CRLB = .15):
     '''
     Parameters
     ----------

@@ -11,7 +11,7 @@ import copy
 from Align_Datasets.AlignModel import AlignModel
 
 class Dataset_hdf5(AlignModel):
-    def __init__(self, path, subset=None, align_rcc=True, coupled=False):
+    def __init__(self, path, pix_size=1, align_rcc=True, coupled=False):
         '''
         Very simplistic version of something that should look like the Database class
 
@@ -27,6 +27,7 @@ class Dataset_hdf5(AlignModel):
         '''        
         self.shift_rcc=None
         self.coupled=coupled
+        self.pix_size=pix_size
         
         '''
         atm everything is only for coupled datasets, so no KNN 3dim tensors
@@ -47,12 +48,14 @@ class Dataset_hdf5(AlignModel):
         else:
             raise TypeError('Path invalid')
         
+        self.ch1.pos *= self.pix_size
+        self.ch2.pos *= self.pix_size
         
         self.ch2_original=copy.deepcopy(self.ch2)                               # making a copy of the original channel
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
         if align_rcc: self.align_rcc()                                          # pre-aligning datasets via rcc 
-        AlignModel.__init__(self, subset)           
+        AlignModel.__init__(self)           
             
           
     #%% Loading the dataset functions

@@ -20,21 +20,21 @@ class channel:
         if data is not None:
             self.pos = np.float32(data[:,:2])
             self.frame = data[:,2]
-            self._xyI = data[:,3]
+            #self._xyI = data[:,3]
             self.index = data[:,4]
             self.N = data.shape[0]
         else:
             self.pos = pos if pos is not None else {}
             self.frame = frame if frame is not None else {}
-            self._xyI = _xyI if _xyI is not None else {}
+            #self._xyI = _xyI if _xyI is not None else {}
             self.index = index if index is not None else {}
             self.N = pos.shape[0]
         self.imgshape=imgshape 
         
     def compile_data(self):
         return np.concatenate((self.pos, self.frame[:,None],self._xyI[:,None], self.index[:,None]), axis=1)
-    
-    def generate_xyI(self):
+        
+    def _xyI(self):
     # creates an intensity of 1 for each pos
         r=np.zeros((self.N,3))
         r[:,:2] = self.pos[:,:2]

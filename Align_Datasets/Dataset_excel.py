@@ -11,8 +11,9 @@ from Align_Datasets.channel_class import channel
 
 
 class Dataset_excel(AlignModel):
-    def __init__(self, path, align_rcc=True, coupled=False, 
-                 imgshape=[512, 512], shift_rcc=None, subset=None):
+    def __init__(self, path, pix_size=1, align_rcc=True, coupled=False, 
+                 imgshape=[512, 512], shift_rcc=None):
+        self.pix_size=pix_size
         self.imgshape=imgshape
         self.shift_rcc=shift_rcc
         self.align_rcc=align_rcc
@@ -22,7 +23,7 @@ class Dataset_excel(AlignModel):
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
-        AlignModel.__init__(self, subset)
+        AlignModel.__init__(self)
         
         
     #%% functions
@@ -44,6 +45,8 @@ class Dataset_excel(AlignModel):
                 shift_rcc=ch1.align(ch2)
                 print('Shifted with RCC of', shift_rcc)  
             ch1.pos += shift_rcc 
+        ch1.pos *= self.pix_size
+        ch2.pos *= self.pix_size
            
         return ch1, ch2
     

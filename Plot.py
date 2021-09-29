@@ -169,7 +169,7 @@ class Plot:
         plt.tight_layout()
         
         
-    def ErrorDistribution_xy(self, nbins=30):
+    def ErrorDistribution_xy(self, nbins=30, xlim=31):
         if not self.coupled: 
             pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
         else:
@@ -193,13 +193,13 @@ class Plot:
         
         ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
         ax[0].set_ylim([0,ymax])
-        ax[0].set_xlim(-31,31)
+        ax[0].set_xlim(-xlim,xlim)
         ax[0].set_xlabel('x-error [nm]')
         ax[0].set_ylabel('# of localizations')
         ax[0].legend()
         
         ax[1].set_ylim([0,ymax])
-        ax[1].set_xlim(-31,31)
+        ax[1].set_xlim(-xlim,xlim)
         ax[1].set_xlabel('y-error [nm]')
         ax[1].set_ylabel('# of localizations')
         ax[1].legend()
@@ -331,7 +331,7 @@ class Plot:
             loc = np.round(locs[i,:],0).astype('int')
             if self.isin_domain(loc):
                 loc -= np.round(self.bounds[:,0],0).astype('int') # place the zero point on the left
-                channel[loc[0]-1, loc[1]-1] = 1
+                channel[loc[0], loc[1]] = 1
         return channel
     
     

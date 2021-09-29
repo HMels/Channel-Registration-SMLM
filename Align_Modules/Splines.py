@@ -5,45 +5,46 @@ Created on Thu Sep  9 16:23:12 2021
 @author: Mels
 """
 import tensorflow as tf
+import numpy as np
 from Align_Modules.Optimization_fn import Rel_entropy
 
-class SplinesModel(tf.keras.Model):
-    '''
-    Main Layer for calculating the relative entropy of a certain deformation
-    ----------
-    - it takes the x_input, the [x1,x2] locations of all localizations
-    - gives it a shift and rotation deformation
-    - calculates the relative entropy via Rel_entropy()    
-    '''
-    def __init__(self, CP_locs, CP_idx, CP_idx_NN=None, direct=False, name='CatmullRomSplines'):
-        super().__init__(name=name)
-        self.direct=direct
-        # The location of the ControlPoints. This will be trained
-        self.CP_locs_trainable = tf.Variable(CP_locs[1:-1,1:-1,:], dtype=tf.float32,
-                                   trainable=True, name='ControlPointstrainable')  
-        self.CP_locs_untrainable_ax0 = tf.Variable(
-            [CP_locs[0,:,:][None], CP_locs[-1,:,:][None]],
-            trainable=False, name='ControlPointsUntrainable_ax0'
-            )
-        self.CP_locs_untrainable_ax1 = tf.Variable(
-            [CP_locs[1:-1,0,:][:,None], CP_locs[1:-1,-1,:][:,None]],
-            trainable=False, name='ControlPointsUntrainable_ax1'
-            )
-        
-        # The indices of which locs in ch2 belong to which CP_locs
-        self.CP_idx = tf.Variable(CP_idx, dtype=tf.int32,
-                                  trainable=False, name='ControlPointsIdx')
-        self.CP_idx_NN = tf.Variable(CP_idx_NN, dtype=tf.int32,
-                                  trainable=False, name='ControlPointsIdx') if CP_idx_NN is not None else {}
-        
-        self.A = tf.Variable([
-            [-.5, 1.5, -1.5, 0.5],
-            [1, -2.5, 2, -.5],
-            [-.5, 0, .5, 0],
-            [0, 1, 0, 0]
-            ], trainable=False, dtype=tf.float32)
-        
+
+class _CatmullRomSplineBase(tf.keras.Model):
     
+    def __init__(self):
+        super(_CatmullRomSplineBase, self).__init__()
+
+        hermiteBasis = np.array([
+             [2, -2, 1, 1],
+             [-3, 3,-2,-1],
+             [0,  0, 1, 0],
+             [1,  0, 0, 0]])
+        
+        catmullRom = np.array([
+            [0,1,0,0],
+            [0,0,1,0],
+            [-0.5,0,0.5,0],
+            [0,-0.5,0,0.5]])
+    
+        A = (( hermiteBasis @ catmullRom )[::-1]).copy()
+        self.spline_basis  = tf.Variable(A, trainable=False, dtype=tf.float32)
+        
+    def __str__(self):
+        return f'Catmull Rom Spline with ControlPoints ({self.ControlPoints.shape})'
+
+
+class CatmullRomSpline2D(_CatmullRomSplineBase):
+    """
+    Spline that maps a 2D coordinate onto a n-d output
+    """
+    def __init__(self, ControlPoints, direct=True):
+        super(CatmullRomSpline2D, self).__init__()
+        
+        assert(len(ControlPoints.shape)==3)
+        self.ControlPoints = tf.Variable(ControlPoints, trainable=True, dtype=tf.float32)
+        self.direct = direct
+        
+        
     @tf.function 
     def call(self, ch1, ch2):
         if self.direct:
@@ -53,142 +54,60 @@ class SplinesModel(tf.keras.Model):
             ch2_mapped = self.transform_mat(ch2)
             return Rel_entropy(ch1, ch2_mapped)
         
-    
-    #@tf.function
-    @tf.autograph.experimental.do_not_convert
-    def transform_vec(self, x_input):
-        self.load_CPlocs()
-        self.update_splines(self.CP_idx)        
-        x = x_input[:,0][:,None]%1
-        y = x_input[:,1][:,None]%1
+
+    @tf.function
+    def transform_vec(self, pts):
+        x = pts[:,0]
+        y = pts[:,1]
+
+        ix = tf.cast(x, tf.int32)
+        sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
+
+        iy = tf.cast(y, tf.int32)
+        sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
+
+        iy = tf.clip_by_value(((iy-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[0]-1)
+        ix = tf.clip_by_value(((ix-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[1]-1)
+
+        # compute sx^a * A
+        cx = (sx[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
+        cy = (sy[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
         
-        M_matrix = tf.stack([
-            tf.pow(x,3)*tf.pow(y,3)*self.Sum_A(0,0),
-            tf.pow(x,3)*tf.pow(y,2)*self.Sum_A(0,1),
-            tf.pow(x,3)*tf.pow(y,1)*self.Sum_A(0,2),
-            tf.pow(x,3)*tf.pow(y,0)*self.Sum_A(0,3),
-            
-            tf.pow(x,2)*tf.pow(y,3)*self.Sum_A(1,0),
-            tf.pow(x,2)*tf.pow(y,2)*self.Sum_A(1,1),
-            tf.pow(x,2)*tf.pow(y,1)*self.Sum_A(1,2),
-            tf.pow(x,2)*tf.pow(y,0)*self.Sum_A(1,3),
+        ix = ix[:,None,:] * tf.ones(4,dtype=tf.int32)[None,:,None]
+        iy = iy[:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,:]
+        #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
+        #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
+        idx = tf.stack([iy,ix],-1)
+        sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
         
-            tf.pow(x,1)*tf.pow(y,3)*self.Sum_A(2,0),
-            tf.pow(x,1)*tf.pow(y,2)*self.Sum_A(2,1),
-            tf.pow(x,1)*tf.pow(y,1)*self.Sum_A(2,2),
-            tf.pow(x,1)*tf.pow(y,0)*self.Sum_A(2,3),
-            
-            tf.pow(x,0)*tf.pow(y,3)*self.Sum_A(3,0),
-            tf.pow(x,0)*tf.pow(y,2)*self.Sum_A(3,1),
-            tf.pow(x,0)*tf.pow(y,1)*self.Sum_A(3,2),
-            tf.pow(x,0)*tf.pow(y,0)*self.Sum_A(3,3),
-            ], axis=2)
-        return tf.reduce_sum(M_matrix, axis=2)
+        # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
+        return tf.reduce_sum((sel_ControlPoints * cy[:,:,None,None] * cx[:,None,:,None]), axis=(1,2))
     
     
-    #@tf.function
-    @tf.autograph.experimental.do_not_convert
-    def transform_mat(self, x_input):
-        self.load_CPlocs()
-        self.update_splines(self.CP_idx_NN)        
-        x = x_input[:,:,0][:,:,None]%1
-        y = x_input[:,:,1][:,:,None]%1
+    @tf.function
+    def transform_mat(self, pts):
+        x = pts[:,:,0]
+        y = pts[:,:,1]
+
+        ix = tf.cast(x, tf.int32)
+        sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
+
+        iy = tf.cast(y, tf.int32)
+        sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
+
+        iy = tf.clip_by_value(((iy-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[0]-1)
+        ix = tf.clip_by_value(((ix-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[1]-1)
+
+        # compute sx^a * A
+        cx = (sx[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
+        cy = (sy[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
         
-        M_matrix = tf.stack([
-            tf.pow(x,3)*tf.pow(y,3)*self.Sum_A(0,0),
-            tf.pow(x,3)*tf.pow(y,2)*self.Sum_A(0,1),
-            tf.pow(x,3)*tf.pow(y,1)*self.Sum_A(0,2),
-            tf.pow(x,3)*tf.pow(y,0)*self.Sum_A(0,3),
-            
-            tf.pow(x,2)*tf.pow(y,3)*self.Sum_A(1,0),
-            tf.pow(x,2)*tf.pow(y,2)*self.Sum_A(1,1),
-            tf.pow(x,2)*tf.pow(y,1)*self.Sum_A(1,2),
-            tf.pow(x,2)*tf.pow(y,0)*self.Sum_A(1,3),
+        ix = ix[:,:,None,:] * tf.ones(4,dtype=tf.int32)[None,None,:,None]
+        iy = iy[:,:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,None,:]
+        #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
+        #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
+        idx = tf.stack([iy,ix],-1)
+        sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
         
-            tf.pow(x,1)*tf.pow(y,3)*self.Sum_A(2,0),
-            tf.pow(x,1)*tf.pow(y,2)*self.Sum_A(2,1),
-            tf.pow(x,1)*tf.pow(y,1)*self.Sum_A(2,2),
-            tf.pow(x,1)*tf.pow(y,0)*self.Sum_A(2,3),
-            
-            tf.pow(x,0)*tf.pow(y,3)*self.Sum_A(3,0),
-            tf.pow(x,0)*tf.pow(y,2)*self.Sum_A(3,1),
-            tf.pow(x,0)*tf.pow(y,1)*self.Sum_A(3,2),
-            tf.pow(x,0)*tf.pow(y,0)*self.Sum_A(3,3),
-            ], axis=3)
-        return tf.reduce_sum(M_matrix, axis=3)
-        
-    
-    #@tf.function
-    @tf.autograph.experimental.do_not_convert
-    def Sum_A(self,a,b):
-        A_matrix = tf.stack([
-            self.A[a,0]*self.A[b,0]*self.q00,
-            self.A[a,0]*self.A[b,1]*self.q01,
-            self.A[a,0]*self.A[b,2]*self.q02,
-            self.A[a,0]*self.A[b,3]*self.q03,
-            
-            self.A[a,1]*self.A[b,0]*self.q10,
-            self.A[a,1]*self.A[b,1]*self.q11,
-            self.A[a,1]*self.A[b,2]*self.q12,
-            self.A[a,1]*self.A[b,3]*self.q13,
-            
-            self.A[a,2]*self.A[b,0]*self.q20,
-            self.A[a,2]*self.A[b,1]*self.q21,
-            self.A[a,2]*self.A[b,2]*self.q22,
-            self.A[a,2]*self.A[b,3]*self.q23,
-            
-            self.A[a,3]*self.A[b,0]*self.q30,
-            self.A[a,3]*self.A[b,1]*self.q31,
-            self.A[a,3]*self.A[b,2]*self.q32,
-            self.A[a,3]*self.A[b,3]*self.q33
-            ], axis=2)
-        return tf.reduce_sum(A_matrix, axis=2)
-    
-    
-    #@tf.function
-    @tf.autograph.experimental.do_not_convert
-    def load_CPlocs(self):
-        self.CP_locs = tf.concat([ 
-            self.CP_locs_untrainable_ax0[0],
-            tf.concat([ 
-                self.CP_locs_untrainable_ax1[0], 
-                self.CP_locs_trainable,
-                self.CP_locs_untrainable_ax1[1]
-                ],axis=1),
-            self.CP_locs_untrainable_ax0[1]
-            ],axis=0)
-        
-    
-    #@tf.function
-    def update_splines(self, idx):
-        self.q00 = tf.gather_nd(self.CP_locs, idx+[-1,-1])  # q_k
-        self.q01 = tf.gather_nd(self.CP_locs, idx+[-1,0])  # q_k
-        self.q02 = tf.gather_nd(self.CP_locs, idx+[-1,1])  # q_k
-        self.q03 = tf.gather_nd(self.CP_locs, idx+[-1,2])  # q_k
-            
-        self.q10 = tf.gather_nd(self.CP_locs, idx+[0,-1])  # q_k
-        self.q11 = tf.gather_nd(self.CP_locs, idx+[0,0])  # q_k
-        self.q12 = tf.gather_nd(self.CP_locs, idx+[0,1])  # q_k
-        self.q13 = tf.gather_nd(self.CP_locs, idx+[0,2])  # q_k
-            
-        self.q20 = tf.gather_nd(self.CP_locs, idx+[1,-1])  # q_k
-        self.q21 = tf.gather_nd(self.CP_locs, idx+[1,0])  # q_k
-        self.q22 = tf.gather_nd(self.CP_locs, idx+[1,1])  # q_k
-        self.q23 = tf.gather_nd(self.CP_locs, idx+[1,2])  # q_k
-            
-        self.q30 = tf.gather_nd(self.CP_locs, idx+[2,-1])  # q_k
-        self.q31 = tf.gather_nd(self.CP_locs, idx+[2,0])  # q_k
-        self.q32 = tf.gather_nd(self.CP_locs, idx+[2,1])  # q_k
-        self.q33 = tf.gather_nd(self.CP_locs, idx+[2,2])  # q_k
-        
-        
-    def reset_CP(self, CP_idx, CP_idx_NN=None):
-        # The indices of which locs in ch2 belong to which CP_locs
-        self.CP_idx = tf.Variable(CP_idx, dtype=tf.int32,
-                                  trainable=False, name='ControlPointsIdx')
-        self.CP_idx_NN = (tf.Variable(CP_idx_NN, dtype=tf.int32,
-                                  trainable=False, name='ControlPointsIdx')
-                          if CP_idx_NN is not None else {})
-        
-        
-    
+        # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
+        return tf.reduce_sum((sel_ControlPoints * cy[:,:,:,None,None] * cx[:,:,None,:,None]), axis=(2,3))
