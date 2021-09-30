@@ -19,7 +19,6 @@ class Dataset_excel(AlignModel):
         self.align_rcc=align_rcc
         self.coupled=coupled
         self.ch1, self.ch2 = self.load_dataset(path)
-        self.couple_dataset(Filter=False)
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
@@ -38,8 +37,8 @@ class Dataset_excel(AlignModel):
         data2 = np.array(ch2[['X(nm)','Y(nm)', 'Pos','Int (Apert.)']])
         data2 = np.column_stack((data2, np.arange(data2.shape[0])))
     
-        ch1 = channel(data1, self.imgshape)
-        ch2 = channel(data2, self.imgshape)
+        ch1 = channel(self.imgshape, pos = np.float32(data1[:,:2]), frame = data1[:,2], index = data1[:,4])
+        ch2 = channel(self.imgshape, pos = np.float32(data2[:,:2]), frame = data2[:,2], index = data2[:,4])
         if self.align_rcc is not False:
             if shift_rcc is None:
                 shift_rcc=ch1.align(ch2)
@@ -50,27 +49,6 @@ class Dataset_excel(AlignModel):
            
         return ch1, ch2
     
-        
-    def couple_dataset(self, maxDist=150, Filter=False):
-        print('Coupling datasets with an iterative method...')
-        if Filter: print('Throwing away all pairs with a distance above',maxDist,'nm')
-        
-        locsA = []
-        locsB = []
-        for i in range(self.ch1.N):
-            # First find the positions in the same frame
-            sameframe_pos = np.squeeze(self.ch2.pos[np.argwhere(self.ch2.frame==self.ch1.frame[i]),:], axis=1)
-            
-            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-sameframe_pos)**2,1))
-            if not Filter or np.min(dists)<maxDist: 
-                locsA.append(self.ch1.pos[i,:])
-                locsB.append(sameframe_pos[np.argmin(dists),:])
-            
-        if not locsA or not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
-        self.ch1.pos = np.array(locsA)
-        self.ch2.pos = np.array(locsB)
-        self.coupled = True
-        
     
     def imgparams(self):
     # calculate borders of system

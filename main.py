@@ -15,7 +15,7 @@ plt.close('all')
 #%% Load datasets
 if False: #% Load Beads
     DS1 = Dataset_hdf5(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'],
-               align_rcc=False, coupled=True, pix_size=159)
+               align_rcc=False, coupled=True, pix_size=1)
     DS1, DS2 = DS1.SplitDataset()
     gridsize=200
 
@@ -24,7 +24,8 @@ if True: #% Load Clusters
     DS1 = Dataset_hdf5([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
                         'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
                        align_rcc=False, coupled=False, pix_size=159)
-    DS1 = DS1.SubsetRandom(subset=0.2)
+    DS1.SubsetRandom(subset=0.2)
+    DS1.couple_dataset(FrameLinking=False)
     DS1, DS2 = DS1.SplitDataset()
     gridsize=1000
     
@@ -34,11 +35,13 @@ if False: #% Load Excel
                         align_rcc=False, coupled=False)
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                         align_rcc=False, coupled=False, pix_size=1)
+    DS1.couple_dataset(FrameLinking=True)
+    DS2.couple_dataset(FrameLinking=True)
     gridsize=3000
 
 
 if False: #% Simulate Dataset beads
-    DS1 = Generate_Dataset(coupled=True, imgshape=[51200, 51200], random_deform=(True))
+    DS1 = Generate_Dataset(coupled=True, imgshape=[512*159, 512*159], random_deform=(True))
     DS1.generate_dataset_beads(N=216, error=1, noise=0.005)
     DS1, DS2 = DS1.SplitDataset()
     gridsize=200
@@ -67,13 +70,13 @@ if not DS1.coupled:
 
 
 #%% Shift Transform
-DS1.Train_Shift(lr=1, Nit=100)
+DS1.Train_Shift(lr=100, Nit=100)
 DS1.Transform_Shift()
 
 
 #%% Affine Transform
-#DS1.Filter_Pairs(pair_filter[0])
-DS1.Train_Affine(lr=1e-3, Nit=500)
+DS1.Filter_Pairs(pair_filter[0])
+DS1.Train_Affine(lr=1, Nit=500)
 DS1.Transform_Affine()
 
 
@@ -81,7 +84,7 @@ DS1.Transform_Affine()
 DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
-#DS1.Filter_Pairs(pair_filter[1])
+DS1.Filter_Pairs(pair_filter[1])
 
 
 #%% Mapping DS2 (either a second dataset or the cross validation)
@@ -96,12 +99,12 @@ if not DS1.developer_mode:
     ## Splines transform
     DS2.reload_splines()
     DS2.Transform_Splines()
-    #DS2.Filter_Pairs(pair_filter[1])
+    DS2.Filter_Pairs(pair_filter[1])
     
     
     #%% output
     nbins=100
-    xlim=30
+    xlim=pair_filter[1]
     
     ## DS1
     DS1.ErrorPlot(nbins=nbins)

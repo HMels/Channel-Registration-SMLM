@@ -326,7 +326,7 @@ class Plot:
         
     def generate_matrix(self, locs):
     # takes the localizations and puts them in a channel
-        channel = np.zeros([self.size_img[0], self.size_img[1]], dtype = int)
+        channel = np.zeros([self.size_img[0]+1, self.size_img[1]+1], dtype = int)
         for i in range(locs.shape[0]):
             loc = np.round(locs[i,:],0).astype('int')
             if self.isin_domain(loc):

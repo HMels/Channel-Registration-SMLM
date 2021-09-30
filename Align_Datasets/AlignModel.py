@@ -88,36 +88,31 @@ class AlignModel(Plot):
         img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
-        
-    def couple_dataset(self, maxDist=150, Filter=False):
+    
+    def couple_dataset(self, FrameLinking=False):
     # couples dataset with a simple iterative nearest neighbour method
+    # FrameLinking links the dataset per frame
         print('Coupling datasets with an iterative method...')
-        (locsA_original, locsB_original) = ([],[])
-        if self.ch2_original is not None: 
-            for i in range(self.ch1.pos.shape[0]):
-                dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2_original.pos)**2,1))
-                if not Filter or np.min(dists)<maxDist:
-                    locsA_original.append( self.ch1.pos[i,:] )
-                    locsB_original.append( self.ch2_original.pos[np.argmin(dists),:] ) 
-            ch1_original = np.array(locsA_original, dtype=np.float32)
-            ch2_original = np.array(locsB_original, dtype=np.float32)
-        else:
-            ch1_original = None
-            ch2_original = None
-        
-        (locsA, locsB)=([],[])
+        (locsB,frameB)=([],[])
         for i in range(self.ch1.pos.shape[0]):
-            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
-            if not Filter or np.min(dists)<maxDist:
-                locsA.append( self.ch1.pos[i,:] )
-                locsB.append( self.ch2.pos[np.argmin(dists),:] ) 
-                        
-        # initialize the new coupled dataset
-        self.ch1.pos = np.array(locsA, dtype=np.float32)
-        self.ch2.pos = np.array(locsB, dtype=np.float32)
-        self.coupled = True
+            if FrameLinking:
+                sameframe_pos = self.ch2.pos[self.ch2.frame==self.ch1.frame[i],:]
+                dists = np.sqrt(np.sum((self.ch1.pos[i,:]-sameframe_pos)**2,1))
+            
+                iB=np.argmin(dists)
+                locsB.append(sameframe_pos[iB,:])
+                frameB.append(self.ch1.frame[i])
+            else:
+                dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
+                iB=np.argmin(dists)
+                locsB.append(self.ch2.pos[iB,:])
+                frameB.append(self.ch2.frame[iB])
+            
+        if not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
         
-        return ch1_original, ch2_original
+        self.ch2.pos = np.array(locsB)
+        self.ch2.frame= np.array(frameB)
+        self.coupled = True
         
         
     def Filter_Pairs(self, maxDist=150):
@@ -171,7 +166,7 @@ class AlignModel(Plot):
         mask2 = np.where( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
                             * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]), True, False )
 
-        return self.gather(mask1, mask2)
+        self = self.gather(mask1, mask2)
         
         
     def SubsetRandom(self, subset):
@@ -183,7 +178,7 @@ class AlignModel(Plot):
             mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=np.random.choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
             
-        return self.gather(mask1, mask2)
+        self = self.gather(mask1, mask2)
         
         
     def SplitDataset(self):
@@ -221,10 +216,10 @@ class AlignModel(Plot):
     # gathers the indexes of both channels
         other = copy.deepcopy(self)
         
-        del other.ch1, other.ch2, other.ch2_original
-        other.ch1 = channel(pos=self.ch1.pos[idx1,:], _xyI = self.ch1._xyI()[idx1,:])
-        other.ch2 = channel(pos=self.ch2.pos[idx2,:], _xyI = self.ch2._xyI()[idx2,:])
-        other.ch2_original = channel(pos=self.ch2_original.pos[idx2,:], _xyI = self.ch2_original._xyI()[idx2,:])
+        del other.ch1, other.ch2, other.ch2_original, 
+        other.ch1 = channel(pos=self.ch1.pos[idx1,:], _xyI = self.ch1._xyI()[idx1,:], frame = self.ch1.frame[idx1])
+        other.ch2 = channel(pos=self.ch2.pos[idx2,:], _xyI = self.ch2._xyI()[idx2,:], frame = self.ch2.frame[idx2])
+        other.ch2_original = channel(pos=self.ch2_original.pos[idx2,:], _xyI = self.ch2_original._xyI()[idx2,:], frame = self.ch2.frame[idx2])
         return other
     
     

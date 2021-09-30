@@ -88,21 +88,3 @@ class Dataset_hdf5(AlignModel):
             self.ch1.pos+= self.shift_rcc
         else: 
             print('Warning: RCC Shift undefined and will be skipped')
-            
-            
-    def couple_dataset(self, maxDist=50, Filter=True):
-    # couples dataset with a simple iterative nearest neighbour method
-        print('Coupling datasets with an iterative method...')
-        locsA=[]
-        locsB=[]
-        for i in range(self.ch1.pos.shape[0]):
-            dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
-            if not Filter or np.min(dists)<maxDist:
-                locsA.append( self.ch1.pos[i,:] )
-                locsB.append( self.ch2.pos[np.argmin(dists),:] ) 
-        
-        if not locsA or not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
-        # initialize the new coupled dataset
-        self.ch1.pos = np.array(locsA)
-        self.ch2.pos = np.array(locsB)
-        self.coupled = True
