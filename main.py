@@ -20,7 +20,7 @@ if False: #% Load Beads
     gridsize=200
 
 
-if True: #% Load Clusters
+if False: #% Load Clusters
     DS1 = Dataset_hdf5([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
                         'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
                        align_rcc=False, coupled=False, pix_size=159)
@@ -30,7 +30,7 @@ if True: #% Load Clusters
     gridsize=1000
     
 
-if False: #% Load Excel
+if True: #% Load Excel
     DS1 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                         align_rcc=False, coupled=False)
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',

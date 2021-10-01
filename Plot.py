@@ -18,26 +18,8 @@ import matplotlib as mpl
 class Plot:
     def __init__(self):
         pass
-                        
-    
-    #%% error_fn
-    def couple_dataset(self, pos1=None, pos2=None, maxDist=50, Filter=True):
-    # couples dataset with a simple iterative nearest neighbour method
-        print('Coupling datasets with an iterative method...')
-        if pos1 is None: 
-            pos1=self.ch1.pos
-            pos2=self.ch2.pos
-            
-        locsA=[]
-        locsB=[]
-        for i in range(pos1.shape[0]):
-            dists = np.sqrt(np.sum((pos1[i,:]-pos2)**2,1))
-            if not Filter or np.min(dists)<maxDist:
-                locsA.append( pos1[i,:] )
-                locsB.append( pos2[np.argmin(dists),:] )
-        return np.array(locsA), np.array(locsB)
-        
-        
+
+
     def ErrorDist(self, pos1, pos2):
     # Generates the error, average and radius
         dist = np.sqrt( np.sum( ( pos1 - pos2 )**2, axis = 1) )
@@ -59,11 +41,9 @@ class Plot:
     #%% Plotting the error
     def ErrorPlot(self, nbins=30):
         ## Coupling Datasets if not done already
-        if not self.coupled: 
-            pos1_original, pos2_original = self.couple_dataset()
-        else:
-            pos1_original=self.ch1.pos
-            pos2_original=self.ch2_original.pos
+        if not self.coupled: raise Exception('Dataset should first be coupled before registration errors can be derived!')
+        pos1_original=self.ch1.pos
+        pos2_original=self.ch2_original.pos
         pos1=self.ch1.pos
         pos2=self.ch2.pos
         
@@ -148,13 +128,11 @@ class Plot:
             return avg1, fig, (ax1, ax2)
 
 
-    def ErrorDistribution(self, nbins=30):
+    def ErrorDistribution(self, nbins=30, FrameLinking=False):
     # just plots the error distribution after mapping
-        if not self.coupled: 
-            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
-        else:
-            pos1=self.ch1.pos
-            pos2=self.ch2.pos
+        if not self.coupled: raise Exception('Dataset should first be coupled before registration errors can be derived!')
+        pos1=self.ch1.pos
+        pos2=self.ch2.pos
         dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
         
         plt.figure()
@@ -169,12 +147,10 @@ class Plot:
         plt.tight_layout()
         
         
-    def ErrorDistribution_xy(self, nbins=30, xlim=31):
-        if not self.coupled: 
-            pos1, pos2 = self.couple_dataset(self.ch1.pos, self.ch2.pos)
-        else:
-            pos1=self.ch1.pos
-            pos2=self.ch2.pos
+    def ErrorDistribution_xy(self, nbins=30, xlim=31, FrameLinking=False):
+        if not self.coupled: raise Exception('Dataset should first be coupled before registration errors can be derived!')
+        pos1=self.ch1.pos
+        pos2=self.ch2.pos
             
         
         distx=pos1[:,0]-pos2[:,0]
@@ -207,30 +183,16 @@ class Plot:
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
+    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic', FrameLinking=False):
         ## Coupling Dataset1 if not done already
-        if not self.coupled: 
-            pos11, pos12 = self.couple_dataset(self.ch1.pos, self.ch2.pos, maxDist=maxDist, Filter=True)
-            pos11=self.ch1.pos
-            pos22=self.ch2.pos
-        else:
-            pos11=self.ch1.pos
-            pos12=self.ch2.pos
-        dist = pos11-pos12
-        pos11 = pos11/1000 # to micrometer
-        pos12 = pos12/1000
+        if not self.coupled: raise Exception('Dataset should first be coupled before registration errors can be derived!')
+        dist = self.ch1.pos-self.ch2.pos
         if dist.shape==(0,): raise ValueError('No neighbours found for channel 1')
             
         ## Coupling Dataset2 if not done already
         if other is not None:
-            if not other.coupled: 
-                pos21, pos22 = other.couple_dataset(other.ch1.pos, other.ch2.pos, maxDist=maxDist, Filter=True)
-            else:
-                pos21=other.ch1.pos
-                pos22=other.ch2.pos
-            dist1 = pos21-pos22
-            pos21 = pos21/1000
-            pos22 = pos22/1000
+            if not self.coupled: raise Exception('Dataset should first be coupled before registration errors can be derived!')
+            dist1 = other.ch1.pos-other.ch2.pos
             if dist1.shape==(0,): raise ValueError('No neighbours found for channel 2')
             
             vmin=np.min((np.min(dist[:,0]),np.min(dist1[:,0]),np.min(dist[:,1]),np.min(dist1[:,1])))
@@ -238,28 +200,28 @@ class Plot:
             
             
             fig, ax = plt.subplots(2,2)
-            ax[0][0].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[0][0].scatter(self.ch1.pos[:,0]/1000, self.ch1.pos[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             #ax[0][0].set_xlabel('x-position [\u03bcm]')
             ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0][0])
             ax[0][0].set_aspect('equal', 'box')
             
-            ax[0][1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[0][1].scatter(self.ch1.pos[:,0]/1000, self.ch1.pos[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             #ax[0][1].set_xlabel('x-position [\u03bcm]')
             #ax[0][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[0][1])
             ax[0][1].set_aspect('equal', 'box')
         
-            ax[1][0].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[1][0].scatter(other.ch1.pos[:,0]/1000, other.ch1.pos[:,1]/1000, s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][0].set_xlabel('x-position [\u03bcm]')
             ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[1][0])
             ax[1][0].set_aspect('equal', 'box')
             
-            ax[1][1].scatter(pos21[:,0], pos21[:,1], s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
+            ax[1][1].scatter(other.ch1.pos[:,0]/1000, other.ch1.pos[:,1]/1000, s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][1].set_xlabel('x-position [\u03bcm]')
             #ax[1][1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
@@ -271,14 +233,14 @@ class Plot:
             vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
             fig, ax = plt.subplots(1,2)
-            ax[0].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,0], cmap=cmap)
+            ax[0].scatter(self.ch1.pos[:,0]/1000, self.ch1.pos[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap)
             ax[0].set_xlabel('x-position [\u03bcm]')
             ax[0].set_ylabel('Batch 1\ny-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0])
             ax[0].set_aspect('equal', 'box')
             
-            ax[1].scatter(pos11[:,0], pos11[:,1], s=ps, c=dist[:,1], cmap=cmap)
+            ax[1].scatter(self.ch1.pos[:,0]/1000, self.ch1.pos[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap)
             ax[1].set_xlabel('x-position [\u03bcm]')
             ax[1].set_ylabel('y-position [\u03bcm]')
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)

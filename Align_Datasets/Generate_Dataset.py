@@ -11,16 +11,17 @@ import numpy as np
 import copy
 import numpy.random as rnd
 
-from Align_Datasets.AlignModel import AlignModel
+from AlignModel import AlignModel
 
 class Generate_Dataset(AlignModel):
     def __init__(self, coupled=False, imgshape=[512, 512], deform_on=True, 
                  shift=np.array([20,20]), rotation=0.2, shear=np.array([0.003,0.002]), 
                  scaling=np.array([1.0004,1.0003]), random_deform=False):
-        AlignModel.__init__(self, subset=1)
         self.imgshape=np.array(imgshape)
         self.coupled=coupled
         self.deform = Deform(deform_on, shift, rotation, shear, scaling, random_deform)
+        
+        AlignModel.__init__(self)
         
     
     #% generate functions

@@ -6,7 +6,7 @@ import numpy as np
 import copy
 import pandas as pd
 
-from Align_Datasets.AlignModel import AlignModel
+from AlignModel import AlignModel
 from Align_Datasets.channel_class import channel
 
 
@@ -22,6 +22,7 @@ class Dataset_excel(AlignModel):
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
+        
         AlignModel.__init__(self)
         
         
