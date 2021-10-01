@@ -19,9 +19,10 @@ class channel:
     def __init__(self, imgshape=[512, 512], pos=None, frame=None, _xyI=None,index=None):
         self.pos = pos if pos is not None else {}
         self.frame = frame if frame is not None else {}
+        self.Nbatch = len(self.pos)
         #self._xyI = _xyI if _xyI is not None else {}
         self.index = index if index is not None else {}
-        self.N = pos.shape[0] if pos is not None else 0
+        self.N = pos.shape[0]
         self.imgshape=imgshape 
         
         

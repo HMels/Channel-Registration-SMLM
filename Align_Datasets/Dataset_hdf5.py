@@ -9,6 +9,8 @@ from photonpy import Dataset
 import copy
 
 from AlignModel import AlignModel
+from Align_Datasets.channel_class import channel
+
 
 class Dataset_hdf5(AlignModel):
     def __init__(self, path, pix_size=1, align_rcc=True, coupled=False):
@@ -34,23 +36,28 @@ class Dataset_hdf5(AlignModel):
             # Dataset is grouped, meaning it has to be split manually
             print('Loading dataset... \n Grouping...')
             ds = Dataset.load(path[0],saveGroups=True)
-            self.ch1 = ds[ds.group==0]
-            self.ch2 = ds[ds.group==1]
+            ch1 = ds[ds.group==0]
+            ch2 = ds[ds.group==1]
         elif len(path)==2:
             # Dataset consists over 2 files
             print('Loading dataset...')
-            self.ch1 = Dataset.load(path[0])
-            self.ch2 = Dataset.load(path[1])
+            ch1 = Dataset.load(path[0])
+            ch2 = Dataset.load(path[1])
         else:
             raise TypeError('Path invalid')
         
-        self.ch1.pos *= self.pix_size
-        self.ch2.pos *= self.pix_size
+        ch1.pos *= self.pix_size
+        ch2.pos *= self.pix_size
+        if align_rcc: self.align_rcc(ch1, ch2)                                          # pre-aligning datasets via rcc 
         
-        self.ch2_original=copy.deepcopy(self.ch2)                               # making a copy of the original channel
+        # put it into our data class
+        self.ch1 = [channel(ch1.imgshape, pos = ch1.pos, frame = ch1.frame)]
+        self.ch2 = [channel(ch2.imgshape, pos = ch2.pos, frame = ch2.frame)]
+        self.ch2_original = copy.deepcopy(self.ch2)
+        self.Nbatch = 1
+        
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
-        if align_rcc: self.align_rcc()                                          # pre-aligning datasets via rcc 
         
         AlignModel.__init__(self)           
             
@@ -60,28 +67,36 @@ class Dataset_hdf5(AlignModel):
     # calculate borders of system
     # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
     # the size of the image and a 2-vector containing the middle of the image
+        img1 = np.empty([2,2, self.Nbatch], dtype = float)
+        for batch in range(self.Nbatch):
+            img1[0,0,batch] = np.min(( np.min(self.ch1[batch].pos[:,0]), np.min(self.ch2[batch].pos[:,0]) ))
+            img1[1,0,batch] = np.max(( np.max(self.ch1[batch].pos[:,0]), np.max(self.ch2[batch].pos[:,0]) ))
+            img1[0,1,batch] = np.min(( np.min(self.ch1[batch].pos[:,1]), np.min(self.ch2[batch].pos[:,1]) ))
+            img1[1,1,batch] = np.max(( np.max(self.ch1[batch].pos[:,1]), np.max(self.ch2[batch].pos[:,1]) ))
+        
         img = np.empty([2,2], dtype = float)
-        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
-        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
-        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
-        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
+        img[0,0] = np.min(img1[0,0,:])
+        img[1,0] = np.max(img1[1,0,:])
+        img[0,1] = np.min(img1[0,1,:])
+        img[1,1] = np.max(img1[1,1,:])
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
     
     def center_image(self):
         if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
-        self.ch1.pos -= self.mid
-        self.ch2.pos -= self.mid
-        self.ch2_original.pos -= self.mid
+        for batch in range(self.Nbatch):
+            self.ch1[batch].pos -= self.mid
+            self.ch2[batch].pos -= self.mid
+            self.ch2_original[batch].pos -= self.mid
         self.img, self.imgsize, self.mid = self.imgparams() 
 
     
-    def align_rcc(self):
+    def align_rcc(self, ch1, ch2):
     # align the dataset using a RCC shift
         print('Alignning both datasets')
-        self.shift_rcc = Dataset.align(self.ch1, self.ch2)
+        self.shift_rcc = Dataset.align(ch1, ch2)
         print('\nRCC shift equals', self.shift_rcc)
         if not np.isnan(self.shift_rcc).any():
-            self.ch1.pos+= self.shift_rcc
+            ch1.pos += self.shift_rcc
         else: 
             print('Warning: RCC Shift undefined and will be skipped')

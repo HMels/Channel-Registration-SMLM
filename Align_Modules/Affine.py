@@ -3,8 +3,6 @@
 The class containing the Affine Transform Optimization via TensorFlow
 """
 import tensorflow as tf
-from Align_Modules.Optimization_fn import Rel_entropy
-
 
 class AffineModel(tf.keras.Model):
     '''
@@ -33,12 +31,9 @@ class AffineModel(tf.keras.Model):
     @tf.function 
     def call(self, ch1, ch2):
         if self.direct:
-            ch2_mapped = self.transform_vec(ch2)
-            return tf.reduce_sum(tf.square(ch1-ch2_mapped)) 
+            return self.transform_vec(ch2)
         else:
-            # 
-            ch2_mapped = self.transform_mat(ch2)
-            return Rel_entropy(ch1, ch2_mapped)
+            return self.transform_mat(ch2)
     
     
     @tf.function

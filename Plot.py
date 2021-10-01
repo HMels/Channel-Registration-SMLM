@@ -14,28 +14,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-
 class Plot:
     def __init__(self):
         pass
 
-
     def ErrorDist(self, pos1, pos2):
     # Generates the error, average and radius
         dist = np.sqrt( np.sum( ( pos1 - pos2 )**2, axis = 1) )
-        return dist, np.average(dist), np.sqrt(np.sum(pos1**2,1))     
-        
-        
-    def imgparams(self):
-    # calculate borders of system
-    # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
-    # the size of the image and a 2-vector containing the middle of the image
-        img = np.empty([2,2], dtype = float)
-        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
-        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
-        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
-        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
-        return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
+        return dist, np.average(dist), np.sqrt(np.sum(pos1**2,1)) 
     
     
     #%% Plotting the error

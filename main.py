@@ -36,7 +36,7 @@ if True: #% Load Excel
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                         align_rcc=False, coupled=False, pix_size=1)
     DS1.couple_dataset(FrameLinking=True)
-    DS2.couple_dataset(FrameLinking=True)
+    DS1.SplitFrames()
     gridsize=3000
 
 
@@ -73,12 +73,10 @@ if not DS1.coupled:
 DS1.Train_Shift(lr=100, Nit=100)
 DS1.Transform_Shift()
 
-
 #%% Affine Transform
 DS1.Filter_Pairs(pair_filter[0])
 DS1.Train_Affine(lr=1, Nit=500)
 DS1.Transform_Affine()
-
 
 #%% CatmullRomSplines
 DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
@@ -92,19 +90,23 @@ if not DS1.developer_mode:
     ## Copy all mapping parameters
     DS2.copy_models(DS1)
     
-    ## Shift and Affine transform
+    ## Transforms
     DS2.Transform_Shift()
     DS2.Transform_Affine()
-    
-    ## Splines transform
-    DS2.reload_splines()
     DS2.Transform_Splines()
-    DS2.Filter_Pairs(pair_filter[1])
     
     
     #%% output
     nbins=100
     xlim=pair_filter[1]
+    
+    ## Coupling dataset
+    DS2.couple_dataset(FrameLinking=True)
+    DS2.Filter_Pairs(pair_filter[1])
+    
+    ## Add all batches together for data processing
+    DS1.concat_batches()
+    DS2.concat_batches()
     
     ## DS1
     DS1.ErrorPlot(nbins=nbins)
@@ -119,7 +121,7 @@ if not DS1.developer_mode:
     
     #%% image
     ## Image overview
-    if True:
+    if False:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
         DS1.plot_1channel()

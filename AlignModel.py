@@ -81,11 +81,18 @@ class AlignModel(Plot):
     # calculate borders of system
     # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
     # the size of the image and a 2-vector containing the middle of the image
+        img1 = np.empty([2,2, self.Nbatch], dtype = float)
+        for batch in range(self.Nbatch):
+            img1[0,0,batch] = np.min(( np.min(self.ch1[batch].pos[:,0]), np.min(self.ch2[batch].pos[:,0]) ))
+            img1[1,0,batch] = np.max(( np.max(self.ch1[batch].pos[:,0]), np.max(self.ch2[batch].pos[:,0]) ))
+            img1[0,1,batch] = np.min(( np.min(self.ch1[batch].pos[:,1]), np.min(self.ch2[batch].pos[:,1]) ))
+            img1[1,1,batch] = np.max(( np.max(self.ch1[batch].pos[:,1]), np.max(self.ch2[batch].pos[:,1]) ))
+        
         img = np.empty([2,2], dtype = float)
-        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
-        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
-        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
-        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
+        img[0,0] = np.min(img1[0,0,:])
+        img[1,0] = np.max(img1[1,0,:])
+        img[0,1] = np.min(img1[0,1,:])
+        img[1,1] = np.max(img1[1,1,:])
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
     
@@ -93,25 +100,25 @@ class AlignModel(Plot):
     # couples dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
         print('Coupling datasets with an iterative method...')
-        (locsB,frameB)=([],[])
-        for i in range(self.ch1.pos.shape[0]):
-            if FrameLinking:
-                sameframe_pos = self.ch2.pos[self.ch2.frame==self.ch1.frame[i],:]
-                dists = np.sqrt(np.sum((self.ch1.pos[i,:]-sameframe_pos)**2,1))
+        for batch in range(self.Nbatch):
+            (locsB,frameB)=([],[])
+            for i in range(self.ch1[batch].pos.shape[0]):
+                if FrameLinking:
+                    sameframe_pos = self.ch2[batch].pos[self.ch2[batch].frame==self.ch1[batch].frame[i],:]
+                    dists = np.sqrt(np.sum((self.ch1[batch].pos[i,:]-sameframe_pos)**2,1))
+                
+                    iB=np.argmin(dists)
+                    locsB.append(sameframe_pos[iB,:])
+                    frameB.append(self.ch1[batch].frame[i])
+                else:
+                    dists = np.sqrt(np.sum((self.ch1[batch].pos[i,:]-self.ch2[batch].pos)**2,1))
+                    iB=np.argmin(dists)
+                    locsB.append(self.ch2[batch].pos[iB,:])
+                    frameB.append(self.ch2[batch].frame[iB])
             
-                iB=np.argmin(dists)
-                locsB.append(sameframe_pos[iB,:])
-                frameB.append(self.ch1.frame[i])
-            else:
-                dists = np.sqrt(np.sum((self.ch1.pos[i,:]-self.ch2.pos)**2,1))
-                iB=np.argmin(dists)
-                locsB.append(self.ch2.pos[iB,:])
-                frameB.append(self.ch2.frame[iB])
+            self.ch2[batch].pos = np.array(locsB)
+            self.ch2[batch].frame = np.array(frameB)
             
-        if not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
-        
-        self.ch2.pos = np.array(locsB)
-        self.ch2.frame= np.array(frameB)
         self.coupled = True
         
         
@@ -119,12 +126,15 @@ class AlignModel(Plot):
     # Filter pairs above maxDist
         print('Filtering pairs above',maxDist,'nm...')
         if not self.coupled: raise Exception('Dataset should be coupled before filtering pairs')
-        dists = np.sqrt(np.sum( (self.ch1.pos - self.ch2.pos)**2 ,axis=1))
-        idx = np.argwhere(dists<maxDist)
-        if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
-        self.ch1.pos = np.squeeze(self.ch1.pos[idx,:],axis=1)
-        self.ch2.pos = np.squeeze(self.ch2.pos[idx,:],axis=1)
-        if self.ch2_original is not None: self.ch2_original.pos = np.squeeze(self.ch2_original.pos[idx,:],axis=1)
+        
+        for batch in range(self.Nbatch):
+            dists = np.sqrt(np.sum( (self.ch1[batch].pos - self.ch2[batch].pos)**2 ,axis=1))
+            idx = np.argwhere(dists<maxDist)
+            
+            if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
+            self.ch1[batch].pos = np.squeeze(self.ch1[batch].pos[idx,:],axis=1)
+            self.ch2[batch].pos = np.squeeze(self.ch2[batch].pos[idx,:],axis=1)
+            if self.ch2_original[batch] is not None: self.ch2_original[batch].pos = np.squeeze(self.ch2_original[batch].pos[idx,:],axis=1)
         self.dev_mode('Filter Pairs')
         
         
@@ -144,48 +154,42 @@ class AlignModel(Plot):
             self.x1_max = other.x1_max
             self.x2_max = other.x2_max
         
-        
-    def reload_splines(self):
-        if self.gridsize is not None:
-            ch2_input = tf.Variable(self.ch2.pos / self.gridsize)
-        
-            self.SplinesModel.CP_idx = tf.cast(tf.stack(
-                [( ch2_input[:,0]-self.x1_min+self.edge_grids)//1 ,
-                 ( ch2_input[:,1]-self.x2_min+self.edge_grids)//1 ], axis=1), dtype=tf.int32)
-            #self.SplinesModel.update_splines(self.CP_idx)
-            
             
     #%% Split dataset or load subset
     def SubsetWindow(self, subset):
     # loading subset of dataset by creating a window of size subset 
+        if self.Nbatch>1: raise ValueError('SubsetRandom should be used before creating batches!')
         l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
         r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-        
-        mask1 = np.where( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
-                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]) , True, False)
-        mask2 = np.where( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
-                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]), True, False )
+    
+        mask1 = np.where( (self.ch1[0].pos[:,0] >= l_grid[0]) * (self.ch1[0].pos[:,1] >= l_grid[1])
+                            * (self.ch1[0].pos[:,0] <= r_grid[0]) * (self.ch1[0].pos[:,1] <= r_grid[1]) , True, False)
+        mask2 = np.where( (self.ch2[0].pos[:,0] >= l_grid[0]) * (self.ch2[0].pos[:,1] >= l_grid[1])
+                            * (self.ch2[0].pos[:,0] <= r_grid[0]) * (self.ch2[0].pos[:,1] <= r_grid[1]), True, False )
 
         self = self.gather(mask1, mask2)
         
         
     def SubsetRandom(self, subset):
     # loading subset of dataset by taking a random subset
+        if self.Nbatch>1: raise ValueError('SubsetRandom should be used before creating batches!')
         if self.coupled:
-            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
+            mask1=np.random.choice(self.ch1[0].pos.shape[0], int(self.ch1[0].pos.shape[0]*subset))
             mask2=mask1
         else:
-            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
-            mask2=np.random.choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
+            mask1=np.random.choice(self.ch1[0].pos.shape[0], int(self.ch1[0].pos.shape[0]*subset))
+            mask2=np.random.choice(self.ch2[0].pos.shape[0], int(self.ch2[0].pos.shape[0]*subset))
             
         self = self.gather(mask1, mask2)
         
         
     def SplitDataset(self):
     # Splits dataset into 2 halves for cross validation
+        if self.Nbatch>1: raise ValueError('SplitDataset should be used before creating batches!')
         if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
-        N1=self.ch1.pos.shape[0]
-        N2=self.ch2.pos.shape[0]
+        
+        N1=self.ch1[0].pos[0].shape[0]
+        N2=self.ch2[0].pos[0].shape[0]
         if self.coupled:
             if N1!=N2: raise Exception('Datasets are coupled but not equal in size')
             mask1=np.ones(N1, dtype=bool)
@@ -212,33 +216,78 @@ class AlignModel(Plot):
         return other1, other2
     
     
+    def SplitFrames(self):
+        print('Splitting Dataset into different frames...')
+        if self.Nbatch>1: raise ValueError('Dataset already split in batches')
+        frames = np.unique(self.ch1[0].frame)
+        (ch1, ch2, ch2_original) = ([],[],[])
+        for frame in frames:
+            idx1 = np.argwhere(self.ch1[0].frame==frame)
+            idx2 = np.argwhere(self.ch2[0].frame==frame)
+            
+            ch1.append( channel(pos=np.squeeze(self.ch1[0].pos[idx1,:], axis=1), _xyI = self.ch1[0]._xyI()[idx1,:], frame = self.ch1[0].frame[idx1]) )
+            ch2.append( channel(pos=np.squeeze(self.ch2[0].pos[idx1,:], axis=1), _xyI = self.ch2[0]._xyI()[idx2,:], frame = self.ch2[0].frame[idx2]) )
+            ch2_original.append( channel(pos=np.squeeze(self.ch2_original[0].pos[idx1,:], axis=1), _xyI = self.ch2_original[0]._xyI()[idx2,:], frame = self.ch2_original[0].frame[idx2]) )
+            
+        self.ch1=ch1
+        self.ch2=ch2
+        self.ch2_original=ch2_original
+        self.Nbatch = len(self.ch1)
+    
     def gather(self, idx1, idx2):
     # gathers the indexes of both channels
         other = copy.deepcopy(self)
         
-        del other.ch1, other.ch2, other.ch2_original, 
-        other.ch1 = channel(pos=self.ch1.pos[idx1,:], _xyI = self.ch1._xyI()[idx1,:], frame = self.ch1.frame[idx1])
-        other.ch2 = channel(pos=self.ch2.pos[idx2,:], _xyI = self.ch2._xyI()[idx2,:], frame = self.ch2.frame[idx2])
-        other.ch2_original = channel(pos=self.ch2_original.pos[idx2,:], _xyI = self.ch2_original._xyI()[idx2,:], frame = self.ch2.frame[idx2])
+        del other.ch1, other.ch2, other.ch2_original
+        (ch1, ch2, ch2_original) = ([],[],[])
+        for batch in range(self.Nbatch):
+            ch1.append( channel(pos=self.ch1.pos[idx1,:], _xyI = self.ch1._xyI()[idx1,:], frame = self.ch1.frame[idx1]) )
+            ch2.append( channel(pos=self.ch2.pos[idx2,:], _xyI = self.ch2._xyI()[idx2,:], frame = self.ch2.frame[idx2]) )
+            ch2_original.append( channel(pos=self.ch2_original.pos[idx2,:], _xyI = self.ch2_original._xyI()[idx2,:], frame = self.ch2.frame[idx2]) )
+        
+        other.ch1=ch1
+        other.ch2=ch2
+        other.ch2_original=ch2_original
         return other
     
+    
+    def concat_batches(self):
+        (ch1_lst, ch2_lst, ch2_original_lst, f1_lst, f2_lst, f2_original_lst) = ([],[],[],[],[],[])
+        for batch in range(self.Nbatch):
+            ch1_lst.append(self.ch1[batch].pos)
+            ch2_lst.append(self.ch2[batch].pos)
+            ch2_original_lst.append(self.ch2_original[batch].pos)
+            f1_lst.append(self.ch1[batch].frame)
+            f2_lst.append(self.ch2[batch].frame)
+            f2_original_lst.append(self.ch2_original[batch].frame)
+            
+        self.ch1= channel(self.imgshape, pos = np.concatenate(ch1_lst, axis=0), frame = np.concatenate(f1_lst, axis=0))
+        self.ch2= channel(self.imgshape, pos = np.concatenate(ch2_lst, axis=0), frame = np.concatenate(f2_lst, axis=0))
+        self.ch2_original= channel(self.imgshape, pos = np.concatenate(ch2_original_lst, axis=0), frame = np.concatenate(f2_original_lst, axis=0))
+            
     
     #%% Generate Neighbours
     def find_neighbours(self, maxDistance=50, k=20):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
-        try:
-            self.find_BrightNN(maxDistance=maxDistance, threshold=k)
-        except Exception:
-            print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
-            self.find_kNN(k)
+        (self.NN1, self.NN2) = ([],[])
+        for batch in range(self.Nbatch):
+            try:
+                NN1, NN2 = self.find_BrightNN(self.ch1[batch], self.ch2[batch], maxDistance=maxDistance, threshold=k)
+            except Exception:
+                print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
+                NN1, NN2 = self.find_kNN(self.ch1[batch], self.ch2[batch], k)
+            
+            self.NN1.append(NN1)
+            self.NN2.append(NN2)
+        self.Neighbours=True
         
         
-    def find_BrightNN(self, maxDistance = 50, threshold = 20):
+    def find_BrightNN(self, ch1, ch2, maxDistance = 50, threshold = 20):
     # generates the brightest neighbours
     # outputs a list of indices for the neigbhours
         with Context() as ctx: # loading all NN
-            counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos, self.ch2.pos, maxDistance)
+            counts,indices = PostProcessMethods(ctx).FindNeighbors(ch1.pos, ch2.pos, maxDistance)
     
         ## putting all NNidx in a list 
         (idxlist, pos, i) = ([], 0,0)
@@ -266,55 +315,68 @@ class AlignModel(Plot):
             self.NN_threshold=threshold
             
         ## Loading the indexes as matrices
-        self.load_NN_matrix(idx1list, idx2list)
+        return self.load_NN_matrix(ch1, ch2, idx1list, idx2list)
         
         
-    def find_kNN(self, k):
+    def find_kNN(self, ch1, ch2, k):
     # generates the k-nearest neighbours
     # outputs a list of indices for the neigbhours
         (idx1list, idx2list) = ([],[])
-        for i in range(self.ch1.pos.shape[0]):
+        for i in range(ch1.pos.shape[0]):
             idx1list.append( (i * np.ones(k, dtype=int)) )
-        for loc in self.ch1.pos:
-            distances = np.sum((loc - self.ch2.pos)**2 , axis = 1)
+        for loc in ch1.pos:
+            distances = np.sum((loc - ch2.pos)**2 , axis = 1)
             idx2list.append( np.argsort( distances )[:k] )
             
         self.NN_k=k
         
         ## Loading the indexes as matrices
-        self.load_NN_matrix(idx1list, idx2list)
+        return self.load_NN_matrix(ch1, ch2, idx1list, idx2list)
     
     
-    def load_NN_matrix(self,idx1list, idx2list):
+    def load_NN_matrix(self,ch1, ch2, idx1list, idx2list):
     # Takes the indexes for channel 1 and 2 and loads the matrix
         (NN1, NN2) = ([],[])
-        for nn in idx1list: NN1.append(self.ch1.pos[nn, :])
-        for nn in idx2list: NN2.append(self.ch2.pos[nn, :])
-        
-        self.NN1 = np.stack(NN1, axis=0)
-        self.NN2 = np.stack(NN2, axis=0)
-        self.Neighbours=True
+        for nn in idx1list: NN1.append(ch1.pos[nn, :])
+        for nn in idx2list: NN2.append(ch2.pos[nn, :])
+        return np.stack(NN1, axis=0), np.stack(NN2, axis=0)
         
     
     #%% Optimization functions
-    #@tf.function
-    def train_model(self, model, Nit, opt, ch1_tf=None, ch2_tf=None):
-    # The training loop of the model
+    def loss_fn(self, ch1, ch2):
         if self.coupled:
-            if ch1_tf is None: ch1_tf=tf.Variable(self.ch1.pos, dtype=tf.float32, trainable=False) 
-            if ch2_tf is None: ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
-        elif self.Neighbours:
-            if ch1_tf is None: ch1_tf=tf.Variable(self.NN1, dtype=tf.float32, trainable=False) 
-            if ch2_tf is None: ch2_tf=tf.Variable(self.NN2, dtype=tf.float32, trainable=False)
-        else:
-            raise Exception('Dataset is not coupled but no Neighbours have been generated yet')
+            loss = ( tf.reduce_sum(tf.square(ch1-ch2)) )
+        else: 
+            CRLB = .15
+            D_KL = 0.5*tf.reduce_sum( tf.square(ch1 - ch2) / CRLB**2 , axis=2)
+            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[2] ) / ch2.shape[0] , axis = 1) ) ) 
+        return loss
+    
+    #@tf.function
+    def train_model(self, model, Nit, opt, pos1_tf=None, pos2_tf=None):
+    # The training loop of the model
+        if pos1_tf is None and pos2_tf is None:
+            (pos1_tf, pos2_tf) = ([],[])
+            if self.coupled:
+                for batch in range(self.Nbatch):
+                    pos1_tf.append( tf.Variable(self.ch1[batch].pos, dtype=tf.float32, trainable=False) )
+                    pos2_tf.append( tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False) )
+            elif self.Neighbours:
+                for batch in range(self.Nbatch):
+                    pos1_tf.append( tf.Variable(self.NN1[batch], dtype=tf.float32, trainable=False) )
+                    pos2_tf.append( tf.Variable(self.NN2[batch], dtype=tf.float32, trainable=False) )
+            else:
+                raise Exception('Dataset is not coupled but no Neighbours have been generated yet')
             
         
         for i in range(Nit):
+            loss = 0
             with tf.GradientTape() as tape:
-                entropy = model(ch1_tf, ch2_tf)
-            
-            grads = tape.gradient(entropy, model.trainable_weights)
+                for batch in range(self.Nbatch):
+                    pos2_mapped = model(pos1_tf[batch], pos2_tf[batch])
+                    loss += self.loss_fn(pos1_tf[batch], pos2_mapped)
+                     
+            grads = tape.gradient(loss, model.trainable_weights)
             opt.apply_gradients(zip(grads, model.trainable_weights))
         return model
             
@@ -324,6 +386,7 @@ class AlignModel(Plot):
     def Train_Shift(self, lr=1, Nit=200):
     # Training the RigidBody Mapping
         if self.ShiftModel is not None: raise Exception('Models can only be trained once')
+        
         # initializing the model and optimizer
         self.ShiftModel=ShiftModel(direct=self.coupled)
         opt=tf.optimizers.Adagrad(lr)
@@ -336,10 +399,11 @@ class AlignModel(Plot):
     def Transform_Shift(self):
     # Transforms ch2 according to the Model
         print('Transforming Shift Mapping...')
-        ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
-        ch2_tf=self.ShiftModel.transform_vec(ch2_tf)
-        self.ch2.pos=np.array(ch2_tf.numpy())
-        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
+        for batch in range(self.Nbatch):
+            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+            ch2_tf=self.ShiftModel.transform_vec(ch2_tf)
+            self.ch2[batch].pos=np.array(ch2_tf.numpy())
+            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
         self.dev_mode('Shift')
     
     
@@ -348,6 +412,7 @@ class AlignModel(Plot):
     # Training the RigidBody Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
         if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+        
         # initializing the model and optimizer
         self.RigidBodyModel=RigidBodyModel(direct=self.coupled)
         opt=tf.optimizers.Adagrad(lr)
@@ -360,11 +425,12 @@ class AlignModel(Plot):
     def Transform_RigidBody(self):
     # Transforms ch2 according to the Model
         if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        print('Transforming RigidBody Mapping...')
-        ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
-        ch2_tf=self.RigidBodyModel.transform_vec(ch2_tf)
-        self.ch2.pos=np.array(ch2_tf.numpy())
-        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
+        for batch in range(self.Nbatch):
+            print('Transforming RigidBody Mapping...')
+            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+            ch2_tf=self.RigidBodyModel.transform_vec(ch2_tf)
+            self.ch2[batch].pos=np.array(ch2_tf.numpy())
+            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
         self.dev_mode('Rigid Body')
         
         
@@ -373,6 +439,7 @@ class AlignModel(Plot):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
         if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+        
         # initializing the model and optimizer
         self.AffineModel=AffineModel(direct=self.coupled)
         
@@ -393,11 +460,12 @@ class AlignModel(Plot):
     def Transform_Affine(self):
     # Transforms ch2 according to the Model
         if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        print('Transforming Affine Mapping...')
-        ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
-        ch2_tf=self.AffineModel.transform_vec(ch2_tf)
-        self.ch2.pos=np.array(ch2_tf.numpy())
-        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
+        for batch in range(self.Nbatch):
+            print('Transforming Affine Mapping...')
+            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+            ch2_tf=self.AffineModel.transform_vec(ch2_tf)
+            self.ch2[batch].pos=np.array(ch2_tf.numpy())
+            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
         self.dev_mode('Affine')
       
         
@@ -405,6 +473,7 @@ class AlignModel(Plot):
     def Train_Polynomial3(self, lr=1, Nit=200):
     # Training the Polynomial3 Mapping
         if self.Polynomial3Model is not None: raise Exception('Models can only be trained once')
+        
         # initializing the model and optimizer
         self.Polynomial3Model=Polynomial3Model(direct=self.coupled)
         opt=tf.optimizers.Adagrad(lr)
@@ -417,10 +486,11 @@ class AlignModel(Plot):
     def Transform_Polynomial3(self):
     # Transforms ch2 according to the Model
         print('Transforming Polynomial3 Mapping...')
-        ch2_tf=tf.Variable(self.ch2.pos, dtype=tf.float32, trainable=False)
-        ch2_tf=self.Polynomial3Model.transform_vec(ch2_tf)
-        self.ch2.pos=np.array(ch2_tf.numpy())
-        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
+        for batch in range(self.Nbatch):
+            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+            ch2_tf=self.Polynomial3Model.transform_vec(ch2_tf)
+            self.ch2[batch].pos=np.array(ch2_tf.numpy())
+            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
         self.dev_mode('Polynomial-3')
         
         
@@ -430,39 +500,49 @@ class AlignModel(Plot):
     # gridsize the size of the Spline grids and edge_grids the number of gridpoints extra at the edge
         if self.SplinesModel is not None: raise Exception('Models can only be trained once')
         
-        ## Create variables normalized by gridsize
-        ch2_input = tf.Variable( tf.stack([
-            (self.ch2.pos[:,0] - np.min(self.ch2.pos[:,0]) ) / gridsize + edge_grids,
-            (self.ch2.pos[:,1] - np.min(self.ch2.pos[:,1]) ) / gridsize + edge_grids
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch1_input = tf.Variable( tf.stack([
-            (self.ch1.pos[:,0] - np.min(self.ch2.pos[:,0]) ) / gridsize + edge_grids,
-            (self.ch1.pos[:,1] - np.min(self.ch2.pos[:,1]) ) / gridsize + edge_grids
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        
+        ## Generate the borders of the system
+        (x1_min, x2_min, x1_max, x2_max) = ([],[],[],[])
+        for batch in range(self.Nbatch):
+            x1_min.append( tf.reduce_min(tf.floor(self.ch2[batch].pos[:,0])) )
+            x2_min.append( tf.reduce_min(tf.floor(self.ch2[batch].pos[:,1])) )
+            x1_max.append( tf.reduce_max(tf.floor(self.ch2[batch].pos[:,0])) )
+            x2_max.append( tf.reduce_max(tf.floor(self.ch2[batch].pos[:,1])) )
+        self.x1_min = np.min(x1_min) / gridsize
+        self.x2_min = np.min(x2_min) / gridsize
+        self.x1_max = np.max(x1_max) / gridsize
+        self.x2_max = np.max(x2_max) / gridsize
+                                
+        ## Create grid
         self.edge_grids = edge_grids
         self.gridsize=gridsize
-        
-        self.x1_min=tf.reduce_min(tf.floor(ch2_input[:,1]))
-        self.x2_min=tf.reduce_min(tf.floor(ch2_input[:,1]))
-        self.x1_max=tf.reduce_max(tf.floor(ch2_input[:,0]))
-        self.x2_max=tf.reduce_max(tf.floor(ch2_input[:,1]))
-                
-        ## Create grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
+        x1_grid = tf.range(0, self.x1_max - self.x1_min + self.edge_grids + 2, dtype=tf.float32)
+        x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
         self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
         
-        ## Create Nearest Neighbours
-        if not self.coupled:
-            ch2_input = tf.Variable( tf.stack([
-                (self.NN2[:,0,:] - np.min(self.ch2.pos[:,0]) ) / gridsize + edge_grids,
-                (self.NN2[:,1,:] - np.min(self.ch2.pos[:,1]) ) / gridsize + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False)
-            ch1_input = tf.Variable( tf.stack([
-                (self.NN1[:,0,:] - np.min(self.ch2.pos[:,0]) ) / gridsize + edge_grids,
-                (self.NN1[:,1,:] - np.min(self.ch2.pos[:,1]) ) / gridsize + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False)
+        ## Create Nearest Neighbours        
+        (ch2_input, ch1_input) = ([],[])
+        if self.coupled:
+            for batch in range(self.Nbatch):
+                ## Create variables normalized by gridsize
+                ch2_input.append( tf.Variable( tf.stack([
+                    self.ch2[batch].pos[:,0] / gridsize - self.x1_min + edge_grids,
+                    self.ch2[batch].pos[:,1] / gridsize - self.x2_min + edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) )
+                ch1_input.append( tf.Variable( tf.stack([
+                    self.ch1[batch].pos[:,0] / gridsize - self.x1_min + edge_grids,
+                    self.ch1[batch].pos[:,1] / gridsize - self.x2_min + edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) )
+        else:
+            for batch in range(self.Nbatch):
+                ## Create variables normalized by gridsize
+                ch2_input.append( tf.Variable( tf.stack([
+                    self.NN2[batch] / gridsize - self.x1_min + edge_grids,
+                    self.NN2[batch] / gridsize - self.x2_min + edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) )
+                ch1_input.append( tf.Variable( tf.stack([
+                    self.NN1[batch] / gridsize - self.x1_min + edge_grids,
+                    self.NN1[batch] / gridsize - self.x2_min + edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) )
             
         ## initialize optimizer
         opt=tf.optimizers.Adagrad(lr)
@@ -479,112 +559,20 @@ class AlignModel(Plot):
         print('Transforming Splines Mapping...')
         if self.gridsize is None: raise Exception('No Grid has been generated yet')
         
-        ## Create variables normalized by gridsize
-        ch2_input = tf.Variable( np.stack([
-            (self.ch2.pos[:,0] - np.min(self.ch2.pos[:,0]) ) / self.gridsize + self.edge_grids,
-            (self.ch2.pos[:,1] - np.min(self.ch2.pos[:,1]) ) / self.gridsize + self.edge_grids,      
-            ], axis=-1), dtype=tf.float32, trainable=False)
+        ch2_input=[]
+        for batch in range(self.Nbatch):
+                ## Create variables normalized by gridsize
+                ch2_input.append( tf.Variable( tf.stack([
+                    self.ch2[batch].pos[:,0] / self.gridsize - self.x1_min + self.edge_grids,
+                    self.ch2[batch].pos[:,1] / self.gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) )
             
         # transform the new ch2 model
-        ch2_input=np.array( self.SplinesModel.transform_vec(ch2_input) * self.gridsize )
-        self.ch2.pos=np.stack([
-            ch2_input[:,0] + np.min(self.ch2.pos[:,0]) - self.edge_grids * self.gridsize,
-            ch2_input[:,1] + np.min(self.ch2.pos[:,1]) - self.edge_grids * self.gridsize          
-            ], axis=-1)
-        
-        # Error messages
-        if np.isnan( self.ch2.pos ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
+        for batch in range(self.Nbatch):
+            ch2_mapped = np.array( self.SplinesModel.transform_vec(ch2_input[batch]) ) 
+            self.ch2[batch].pos=np.stack([
+                (ch2_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
+                (ch2_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
+                ], axis=-1)
+            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
         self.dev_mode('Splines')
-        
-        
-    ## Plotting the Grid
-    def plot_SplineGrid(self, ch1=None, ch2=None, ch2_original=None, locs_markersize=10,
-                        CP_markersize=8, d_grid=.1, grid_markersize=3, grid_opacity=1): 
-        '''
-        Plots the grid and the shape of the grid in between the Control Points
-    
-        Parameters
-        ----------
-        ch1 , ch2 , ch2_original : Nx2 tf.float32 tensor
-            The tensor containing the localizations.
-        d_grid : float, optional
-            The precission of the grid we want to plot in between the
-            ControlPoints. The default is .1.
-        lines_per_CP : int, optional
-            The number of lines we want to plot in between the grids. 
-            Works best if even. The default is 1.
-        locs_markersize : float, optional
-            The size of the markers of the localizations. The default is 10.
-        CP_markersize : float, optional
-            The size of the markers of the Controlpoints. The default is 8.
-        grid_markersize : float, optional
-            The size of the markers of the grid. The default is 3.
-        grid_opacity : float, optional
-            The opacity of the grid. The default is 1.
-    
-        Returns
-        -------
-        None.
-    
-        '''
-        print('Plotting the Spline Grid...')
-        if ch1 is None:
-            ch1=self.ch1.pos
-            ch2=self.ch2.pos
-            ch2_original=self.ch2_original.pos
-        
-        ## The original points
-        ch1 = tf.Variable( tf.stack([
-            (ch1[:,0] - np.min(ch2_original[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch1[:,1] - np.min(ch2_original[:,1])) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch2 = tf.Variable( tf.stack([
-            (ch2[:,0] - np.min(ch2_original[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch2[:,1] - np.min(ch2_original[:,1]) ) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch2_original = tf.Variable( tf.stack([
-            (ch2_original[:,0] - np.min(ch2_original[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch2_original[:,1] - np.min(ch2_original[:,1]) ) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        
-        # plotting the localizations
-        plt.figure()
-        plt.scatter(ch2[:,0],ch2[:,1], c='red', marker='.', s=locs_markersize, label='Mapped CH2')
-        plt.scatter(ch2_original[:,0],ch2_original[:,1], c='orange', marker='.', 
-                    alpha=.7, s=locs_markersize-2, label='Original CH2')
-        plt.scatter(ch1[:,0],ch1[:,1], c='green', marker='.', s=locs_markersize, label='Original CH1')
-               
-        
-        ## Horizontal Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid*2)
-        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-        
-        ## Vertical Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid*2)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-        
-        Grid = self.SplinesModel.transform_vec(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-        plt.scatter(Grid[:,0], Grid[:,1], c='c', marker='.', s=grid_markersize, alpha=grid_opacity)
-        
-        
-        ## Controlpoints Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
-        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-        
-        ## Vertical Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-        
-        Grid = self.SplinesModel.transform_vec(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-        plt.scatter(Grid[:,0], Grid[:,1], c='b', marker='.', s=grid_markersize, alpha=grid_opacity)
-        
-        # plotting the ControlPoints
-        plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
-                    c='b', marker='o', s=CP_markersize, label='ControlPoints')
-        
-        plt.legend()
-        plt.tight_layout()

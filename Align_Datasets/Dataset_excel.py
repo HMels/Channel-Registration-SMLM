@@ -40,6 +40,7 @@ class Dataset_excel(AlignModel):
     
         ch1 = channel(self.imgshape, pos = np.float32(data1[:,:2]), frame = data1[:,2], index = data1[:,4])
         ch2 = channel(self.imgshape, pos = np.float32(data2[:,:2]), frame = data2[:,2], index = data2[:,4])
+        self.Nbatch = 1
         if self.align_rcc is not False:
             if shift_rcc is None:
                 shift_rcc=ch1.align(ch2)
@@ -48,24 +49,32 @@ class Dataset_excel(AlignModel):
         ch1.pos *= self.pix_size
         ch2.pos *= self.pix_size
            
-        return ch1, ch2
+        return [ch1], [ch2]
     
     
     def imgparams(self):
     # calculate borders of system
     # returns a 2x2 matrix containing the edges of the image, a 2-vector containing
     # the size of the image and a 2-vector containing the middle of the image
+        img1 = np.empty([2,2, self.Nbatch], dtype = float)
+        for batch in range(self.Nbatch):
+            img1[0,0,batch] = np.min(( np.min(self.ch1[batch].pos[:,0]), np.min(self.ch2[batch].pos[:,0]) ))
+            img1[1,0,batch] = np.max(( np.max(self.ch1[batch].pos[:,0]), np.max(self.ch2[batch].pos[:,0]) ))
+            img1[0,1,batch] = np.min(( np.min(self.ch1[batch].pos[:,1]), np.min(self.ch2[batch].pos[:,1]) ))
+            img1[1,1,batch] = np.max(( np.max(self.ch1[batch].pos[:,1]), np.max(self.ch2[batch].pos[:,1]) ))
+        
         img = np.empty([2,2], dtype = float)
-        img[0,0] = np.min(( np.min(self.ch1.pos[:,0]), np.min(self.ch2.pos[:,0]) ))
-        img[1,0] = np.max(( np.max(self.ch1.pos[:,0]), np.max(self.ch2.pos[:,0]) ))
-        img[0,1] = np.min(( np.min(self.ch1.pos[:,1]), np.min(self.ch2.pos[:,1]) ))
-        img[1,1] = np.max(( np.max(self.ch1.pos[:,1]), np.max(self.ch2.pos[:,1]) ))
+        img[0,0] = np.min(img1[0,0,:])
+        img[1,0] = np.max(img1[1,0,:])
+        img[0,1] = np.min(img1[0,1,:])
+        img[1,1] = np.max(img1[1,1,:])
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
     
     def center_image(self):
         if self.mid is None: self.img, self.imgsize, self.mid = self.imgparams() 
-        self.ch1.pos -= self.mid
-        self.ch2.pos -= self.mid
-        self.ch2_original.pos -= self.mid
+        for batch in range(self.Nbatch):
+            self.ch1[batch].pos -= self.mid
+            self.ch2[batch].pos -= self.mid
+            self.ch2_original[batch].pos -= self.mid
         self.img, self.imgsize, self.mid = self.imgparams() 

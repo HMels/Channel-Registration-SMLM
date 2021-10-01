@@ -12,6 +12,7 @@ import copy
 import numpy.random as rnd
 
 from AlignModel import AlignModel
+from Align_Datasets.channel_class import channel
 
 class Generate_Dataset(AlignModel):
     def __init__(self, coupled=False, imgshape=[512, 512], deform_on=True, 
@@ -43,6 +44,11 @@ class Generate_Dataset(AlignModel):
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image()
         
+        self.ch1 = channel(self.ch1.imgshape, pos = self.ch1.pos, frame = self.ch1.frame)
+        self.ch2 = channel(self.ch2.imgshape, pos = self.ch2.pos, frame = self.ch2.frame)
+        self.ch2_original = channel(self.ch2_original.imgshape, pos = self.ch2_original.pos, frame = self.ch2_original.frame)
+        self.Nbatch = len(self.ch1)
+        
         
     def generate_dataset_clusters(self, Nclust=650, N_per_clust=250, std_clust=7,
                                  error=10, noise=0.005):
@@ -63,7 +69,11 @@ class Generate_Dataset(AlignModel):
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image()
         
-    
+        self.ch1 = channel(self.ch1.imgshape, pos = self.ch1.pos, frame = self.ch1.frame)
+        self.ch2 = channel(self.ch2.imgshape, pos = self.ch2.pos, frame = self.ch2.frame)
+        self.ch2_original = channel(self.ch2_original.imgshape, pos = self.ch2_original.pos, frame = self.ch2_original.frame)        
+        self.Nbatch = len(self.ch1)
+        
     
     #% functions
     def imgparams(self):
