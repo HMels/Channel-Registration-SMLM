@@ -6,59 +6,44 @@ Created on Thu Sep  9 14:55:12 2021
 """
 import matplotlib.pyplot as plt
 
-from Align_Datasets.Dataset_hdf5 import Dataset_hdf5
-from Align_Datasets.Dataset_excel import Dataset_excel
-from Align_Datasets.Generate_Dataset import Generate_Dataset
+from Dataset import Dataset
 
 plt.close('all')
 
 #%% Load datasets
 if False: #% Load Beads
-    DS1 = Dataset_hdf5(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'],
-               align_rcc=False, coupled=True, pix_size=1)
+    DS1 = Dataset(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'], linked=True, pix_size=1)
+    DS1.load_dataset_hdf5()
     DS1, DS2 = DS1.SplitDataset()
     gridsize=200
 
 
 if False: #% Load Clusters
-    DS1 = Dataset_hdf5([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
-                        'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
-                       align_rcc=False, coupled=False, pix_size=159)
+    DS1 = Dataset([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
+                        'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ], linked=False, pix_size=159)
+    DS1.load_dataset_hdf5()
     DS1.SubsetRandom(subset=0.2)
-    DS1.couple_dataset(FrameLinking=False)
     DS1, DS2 = DS1.SplitDataset()
+    DS1.link_dataset(FrameLinking=False)
     gridsize=1000
     
 
 if True: #% Load Excel
-    DS1 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
-                        align_rcc=False, coupled=False)
-    DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
-                        align_rcc=False, coupled=False, pix_size=1)
-    DS1.couple_dataset(FrameLinking=True)
+    DS1 = Dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv', linked=False, pix_size=1)
+    DS2 = Dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv', linked=False, pix_size=1)
+    DS1.load_dataset_excel()
+    DS2.load_dataset_excel()
+    DS1.link_dataset(FrameLinking=True)
     #DS1.SplitFrames()
     gridsize=3000
 
-
-if False: #% Simulate Dataset beads
-    DS1 = Generate_Dataset(coupled=True, imgshape=[512*159, 512*159], random_deform=(True))
-    DS1.generate_dataset_beads(N=216, error=1, noise=0.005)
-    DS1, DS2 = DS1.SplitDataset()
-    gridsize=200
-    
-    
-if False: #% Simulate Dataset clusters
-    DS1 = Generate_Dataset(coupled=False, imgshape=[512*159, 512*159], random_deform=(True))
-    DS1.generate_dataset_clusters(Nclust=100, N_per_clust=250, std_clust=7, error=10, noise=0.005)
-    DS1, DS2 = DS1.SplitDataset()
-    gridsize=1000
 
 #%% Params
 pair_filter = [250, 30]
 DS1.developer_mode = False
 
 #%% generate NN
-if not DS1.coupled: 
+if not DS1.linked: 
     maxDistance=250
     k=8
     DS1.find_neighbours(maxDistance, k)
@@ -101,7 +86,7 @@ if not DS1.developer_mode:
     xlim=pair_filter[1]
     
     ## Coupling dataset
-    DS2.couple_dataset(FrameLinking=True)
+    DS2.link_dataset(FrameLinking=True)
     DS2.Filter_Pairs(pair_filter[1])
     
     ## Add all batches together for data processing
