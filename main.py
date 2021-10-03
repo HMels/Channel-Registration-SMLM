@@ -36,7 +36,7 @@ if True: #% Load Excel
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                         align_rcc=False, coupled=False, pix_size=1)
     DS1.couple_dataset(FrameLinking=True)
-    DS1.SplitFrames()
+    #DS1.SplitFrames()
     gridsize=3000
 
 
@@ -74,17 +74,17 @@ DS1.Train_Shift(lr=100, Nit=100)
 DS1.Transform_Shift()
 
 #%% Affine Transform
-DS1.Filter_Pairs(pair_filter[0])
-DS1.Train_Affine(lr=1, Nit=500)
+#DS1.Filter_Pairs(pair_filter[0])
+#DS1.Train_Affine(lr=1, Nit=500)
 DS1.Transform_Affine()
 
 #%% CatmullRomSplines
-DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
+#DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
-DS1.Filter_Pairs(pair_filter[1])
+#DS1.Filter_Pairs(pair_filter[1])
 
-
+'''
 #%% Mapping DS2 (either a second dataset or the cross validation)
 if not DS1.developer_mode:
     ## Copy all mapping parameters
@@ -125,3 +125,4 @@ if not DS1.developer_mode:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
         DS1.plot_1channel()
+'''

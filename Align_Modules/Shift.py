@@ -29,7 +29,7 @@ class ShiftModel(tf.keras.Model):
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
 
 
-    @tf.function 
+    #@tf.function 
     def call(self, ch1, ch2):
         if self.direct:
             return self.transform_vec(ch2)
@@ -37,11 +37,11 @@ class ShiftModel(tf.keras.Model):
             return self.transform_mat(ch2)
     
     
-    @tf.function
+    #@tf.function
     def transform_mat(self, ch2):
         return ch2 + self.d[None,None] 
     
     
-    @tf.function
+    #@tf.function
     def transform_vec(self, ch2):
         return ch2 + self.d[None]

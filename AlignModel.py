@@ -352,7 +352,7 @@ class AlignModel(Plot):
             loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[2] ) / ch2.shape[0] , axis = 1) ) ) 
         return loss
     
-    #@tf.function
+
     def train_model(self, model, Nit, opt, pos1_tf=None, pos2_tf=None):
     # The training loop of the model
         if pos1_tf is None and pos2_tf is None:
@@ -383,9 +383,10 @@ class AlignModel(Plot):
     
     #%% Global Transforms (Affine, Polynomial3, RigidBody)
     ## Shift
+    @tf.function
     def Train_Shift(self, lr=1, Nit=200):
     # Training the RigidBody Mapping
-        if self.ShiftModel is not None: raise Exception('Models can only be trained once')
+        #if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
         self.ShiftModel=ShiftModel(direct=self.coupled)
@@ -395,22 +396,24 @@ class AlignModel(Plot):
         print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
         self.ShiftModel = self.train_model(self.ShiftModel, Nit, opt)
         
-    
+    #@tf.function
     def Transform_Shift(self):
     # Transforms ch2 according to the Model
         print('Transforming Shift Mapping...')
-        for batch in range(self.Nbatch):
-            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
-            ch2_tf=self.ShiftModel.transform_vec(ch2_tf)
-            self.ch2[batch].pos=np.array(ch2_tf.numpy())
-            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
+        if self.ShiftModel is None: print('Model not trained yet, will pass without transforming.')
+        else:
+            for batch in range(self.Nbatch):
+                ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+                ch2_tf=self.ShiftModel.transform_vec(ch2_tf)
+                self.ch2[batch].pos=np.array(ch2_tf.numpy())
+                if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
         self.dev_mode('Shift')
     
     
     ## RigidBody
     def Train_RigidBody(self, lr=1, Nit=200):
     # Training the RigidBody Mapping
-        if self.AffineModel is not None: raise Exception('Models can only be trained once')
+        if self.RidigBodyModel is not None: raise Exception('Models can only be trained once')
         if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
@@ -424,13 +427,15 @@ class AlignModel(Plot):
     
     def Transform_RigidBody(self):
     # Transforms ch2 according to the Model
-        if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        for batch in range(self.Nbatch):
-            print('Transforming RigidBody Mapping...')
-            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
-            ch2_tf=self.RigidBodyModel.transform_vec(ch2_tf)
-            self.ch2[batch].pos=np.array(ch2_tf.numpy())
-            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
+        if self.RigidBodyModel is None: print('Model not trained yet, will pass without transforming.')
+        else:
+            if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            for batch in range(self.Nbatch):
+                print('Transforming RigidBody Mapping...')
+                ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+                ch2_tf=self.RigidBodyModel.transform_vec(ch2_tf)
+                self.ch2[batch].pos=np.array(ch2_tf.numpy())
+                if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
         self.dev_mode('Rigid Body')
         
         
@@ -459,13 +464,15 @@ class AlignModel(Plot):
     
     def Transform_Affine(self):
     # Transforms ch2 according to the Model
-        if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        for batch in range(self.Nbatch):
-            print('Transforming Affine Mapping...')
-            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
-            ch2_tf=self.AffineModel.transform_vec(ch2_tf)
-            self.ch2[batch].pos=np.array(ch2_tf.numpy())
-            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
+        if self.AffineModel is None: print('Model not trained yet, will pass without transforming.')
+        else:
+            if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            for batch in range(self.Nbatch):
+                print('Transforming Affine Mapping...')
+                ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+                ch2_tf=self.AffineModel.transform_vec(ch2_tf)
+                self.ch2[batch].pos=np.array(ch2_tf.numpy())
+                if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
         self.dev_mode('Affine')
       
         
@@ -486,11 +493,13 @@ class AlignModel(Plot):
     def Transform_Polynomial3(self):
     # Transforms ch2 according to the Model
         print('Transforming Polynomial3 Mapping...')
-        for batch in range(self.Nbatch):
-            ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
-            ch2_tf=self.Polynomial3Model.transform_vec(ch2_tf)
-            self.ch2[batch].pos=np.array(ch2_tf.numpy())
-            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
+        if self.Polynomial3Model is None: print('Model not trained yet, will pass without transforming.')
+        else:
+            for batch in range(self.Nbatch):
+                ch2_tf=tf.Variable(self.ch2[batch].pos, dtype=tf.float32, trainable=False)
+                ch2_tf=self.Polynomial3Model.transform_vec(ch2_tf)
+                self.ch2[batch].pos=np.array(ch2_tf.numpy())
+                if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
         self.dev_mode('Polynomial-3')
         
         
@@ -557,22 +566,24 @@ class AlignModel(Plot):
     def Transform_Splines(self):
     # Transforms ch2 according to the Model
         print('Transforming Splines Mapping...')
-        if self.gridsize is None: raise Exception('No Grid has been generated yet')
-        
-        ch2_input=[]
-        for batch in range(self.Nbatch):
-                ## Create variables normalized by gridsize
-                ch2_input.append( tf.Variable( tf.stack([
-                    self.ch2[batch].pos[:,0] / self.gridsize - self.x1_min + self.edge_grids,
-                    self.ch2[batch].pos[:,1] / self.gridsize - self.x2_min + self.edge_grids
-                    ], axis=-1), dtype=tf.float32, trainable=False) )
+        if self.SplinesModel is None: print('Model not trained yet, will pass without transforming.')
+        else:
+            if self.gridsize is None: raise Exception('No Grid has been generated yet')
             
-        # transform the new ch2 model
-        for batch in range(self.Nbatch):
-            ch2_mapped = np.array( self.SplinesModel.transform_vec(ch2_input[batch]) ) 
-            self.ch2[batch].pos=np.stack([
-                (ch2_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
-                (ch2_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
-                ], axis=-1)
-            if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
+            ch2_input=[]
+            for batch in range(self.Nbatch):
+                    ## Create variables normalized by gridsize
+                    ch2_input.append( tf.Variable( tf.stack([
+                        self.ch2[batch].pos[:,0] / self.gridsize - self.x1_min + self.edge_grids,
+                        self.ch2[batch].pos[:,1] / self.gridsize - self.x2_min + self.edge_grids
+                        ], axis=-1), dtype=tf.float32, trainable=False) )
+                
+            # transform the new ch2 model
+            for batch in range(self.Nbatch):
+                ch2_mapped = np.array( self.SplinesModel.transform_vec(ch2_input[batch]) ) 
+                self.ch2[batch].pos=np.stack([
+                    (ch2_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
+                    (ch2_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
+                    ], axis=-1)
+                if np.isnan( self.ch2[batch].pos ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
         self.dev_mode('Splines')
