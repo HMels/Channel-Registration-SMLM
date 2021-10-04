@@ -11,16 +11,17 @@ import numpy as np
 from photonpy import PostProcessMethods, Context
 
 from Channel import Channel        
+from Registration import Registration
 
 
 #%% Dataset
-class Dataset:#(AlignModel):
+class Dataset(Registration):
     def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512]):
         self.path=path
         self.pix_size=pix_size
         self.imgshape=imgshape
         self.linked=linked        
-        #AlignModel.__init__(self)
+        Registration.__init__(self)
         
         
     #%% load_dataset
@@ -94,7 +95,7 @@ class Dataset:#(AlignModel):
     def link_dataset(self, FrameLinking=False):
     # links dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
-        print('Coupling datasets with an iterative method...')
+        print('Linking datasets...')
         if len(self.ch1.pos)>1: raise Exception('Dataset should be linked before splitting!')
         
         (locsB,frameB)=([],[])
@@ -113,10 +114,9 @@ class Dataset:#(AlignModel):
                 print(dists.shape, iB)
                 locsB.append(tf.gather(self.ch2.pos[0], iB, axis=0))
                 frameB.append(self.ch2.frame[0][iB])
-            
-            self.ch2.pos[0] = tf.Variable(locsB)
-            self.ch2.frame[0] = tf.Variable(frameB)
-            
+        
+        del self.ch2
+        self.ch2 = Channel(locsB, frameB)
         self.linked = True
         
         

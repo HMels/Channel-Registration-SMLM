@@ -13,11 +13,11 @@ from Align_Modules.RigidBody import RigidBodyModel
 from Align_Modules.Splines import CatmullRomSpline2D
 from Align_Modules.Shift import ShiftModel
 
-from Dataset import Dataset
+from Plot import Plot
 
 
 #%% Align class
-class AlignModel(Dataset):
+class Registration(Plot):
     '''
     The AlignModel Class is a class used for the optimization of a certain Dataset class. Important is 
     that the loaded class contains the next variables:
@@ -46,7 +46,7 @@ class AlignModel(Dataset):
         self.NN_threshold=None
         self.NN_k=None
         self.Neighbours=False       
-        Dataset.__init__(self)
+        Plot.__init__(self)
                 
         
     
@@ -74,23 +74,27 @@ class AlignModel(Dataset):
         else: 
             CRLB = .15
             D_KL = 0.5*tf.reduce_sum( tf.square(ch1 - ch2) / CRLB**2 , axis=2)
-            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[2] ) / ch2.shape[0] , axis = 1) ) ) 
+            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[1] ) / ch2.shape[0] , axis = 1) ) ) 
         return loss
-    
 
-    #@tf.function
-    def train_model(self, model, Nit, opt, pos1_tf, pos2_tf):
-    # The training loop of the model
+    @tf.function
+    def train_step(self, model, Nit, opt, pos1, pos2):
         for i in range(Nit):
-            loss = 0
+            #loss = 0
             with tf.GradientTape() as tape:
-                for batch in range(len(pos1_tf.pos)):
-                    pos2_mapped = model(pos1_tf[batch], pos2_tf[batch])
-                    loss += self.loss_fn(pos1_tf[batch], pos2_mapped)
+                #for batch in range(len(pos1_tf)):
+                pos2_mapped = model(pos1[0], pos2[0])
+                loss = self.loss_fn(pos1[0], pos2_mapped)
                      
             grads = tape.gradient(loss, model.trainable_weights)
             opt.apply_gradients(zip(grads, model.trainable_weights))
-        return model
+        return model.trainable_weights
+    
+    
+    def train_model(self, model, Nit, opt, pos1, pos2):
+    # The training loop of the model
+        model.trainable_weights = self.train_model(model, Nit, opt, pos1, pos2)
+        return model 
             
     
     #%% Global Transforms (Affine, Polynomial3, RigidBody)

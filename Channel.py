@@ -46,4 +46,4 @@ class Channel:
             NN=[]
             for nn in idxlist[batch]:
                 NN.append(tf.gather(self.pos[batch],nn,axis=0))
-            self.NNpos.append( tf.stack(NN, axis=0) )
+            self.NNpos.append( tf.stack(NN, axis=1) )
