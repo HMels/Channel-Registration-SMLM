@@ -68,19 +68,34 @@ class Registration(Plot):
         
         
     #%% Optimization functions
-    #@tf.function
-    def train_model(self, model, Nit, opt, pos1, pos2):
+    def train_model(self, model, Nit, opt, pos1=None, pos2=None):
+        ## Initializing the training loop
+        if pos1 is None and pos2 is None:
+            if self.linked:
+                    pos1, pos2 = self.ch1.pos, self.ch2.pos
+            elif self.Neighbours:
+                    pos1, pos2 = self.ch1.NNpos, self.ch2.NNpos
+            else:
+                raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+           
+        ## The training loop
+        frame,_=tf.unique(self.ch1.frame)
         for i in range(Nit):
-            self.train_step(model, Nit, opt, pos1,pos2)          
+            for fr in frame:
+                idx1=tf.where(self.ch1.frame==fr)
+                idx2=tf.where(self.ch2.frame==fr)
+                pos1_fr=tf.gather(pos1,idx1[:,0],axis=0) 
+                pos2_fr=tf.gather(pos2,idx2[:,0],axis=0) 
+                
+                self.train_step(model, Nit, opt, pos1_fr, pos2_fr)          
         return model
     
     
     #@tf.function
     def train_step(self, model, Nit, opt, pos1, pos2):
         with tf.GradientTape() as tape:
-            #for batch in range(len(pos1_tf)):
-            pos2_mapped = model(pos1[0], pos2[0])
-            loss = self.loss_fn(pos1[0], pos2_mapped)
+            pos2_mapped = model(pos1, pos2)
+            loss = self.loss_fn(pos1, pos2_mapped)
                    
         grads = tape.gradient(loss, model.trainable_weights)
         opt.apply_gradients(zip(grads, model.trainable_weights))
@@ -102,7 +117,7 @@ class Registration(Plot):
     #@tf.function
     def Train_Shift(self, lr=100, Nit=100):
     # Training the RigidBody Mapping
-        #if self.ShiftModel is not None: raise Exception('Models can only be trained once')
+        if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
         self.ShiftModel=ShiftModel(direct=self.linked)
@@ -110,13 +125,8 @@ class Registration(Plot):
         
         # Training the Model
         print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
-        if self.linked:
-                self.ShiftModel = self.train_model(self.ShiftModel, Nit, opt, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.ShiftModel = self.train_model(self.ShiftModel, Nit, opt, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
-            
+        self.ShiftModel = self.train_model(self.ShiftModel, Nit, opt)
+
 
     def Transform_Shift(self):
     # Transforms ch2 according to the Model
@@ -124,8 +134,8 @@ class Registration(Plot):
         if self.ShiftModel is None: print('Model not trained yet, will pass without transforming.')
         else:
             #for batch in range(len(self.ch1.pos)):
-                self.ch2.pos.assign(self.ShiftModel.transform_vec((self.ch2.pos)))
-                if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
+            self.ch2.pos.assign(self.ShiftModel.transform_vec((self.ch2.pos)))
+            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
     
     
     ## RigidBody
@@ -140,24 +150,14 @@ class Registration(Plot):
         
         # Training the Model
         print('Training RigidBody Mapping (lr, #it) =',str((lr, Nit)),'...')
-        if self.linked:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt1, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt1, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+        self.ShiftModel = self.train_model(self.RigidBodyModel, Nit, opt1)
         
         ## then train the d vector (shift)
         self.RigidBodyModel.d._trainable=True
         self.RigidBodyModel.cos._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        if self.linked:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt2, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt2, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+        self.ShiftModel = self.train_model(self.RigidBodyModel, Nit, opt2)
 
     
     def Transform_RigidBody(self):
@@ -184,14 +184,8 @@ class Registration(Plot):
         print('Training Affine Mapping with (lr, #it) =',str((lr, Nit)),'...')
         # first train the A matrix (rot, shear, scaling)
         opt1=tf.optimizers.Adagrad(lr)
-        
         ## Training the Model for A
-        if self.linked:
-                self.AffineModel = self.train_model(self.AffineModel, Nit, opt1, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.AffineModel = self.train_model(self.AffineModel, Nit, opt1, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+        self.AffineModel = self.train_model(self.AffineModel, Nit, opt1)
         
         
         ## then train the d vector (shift)
@@ -199,12 +193,7 @@ class Registration(Plot):
         self.AffineModel.A._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        if self.linked:
-                self.AffineModel = self.train_model(self.AffineModel, Nit, opt2, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.AffineModel = self.train_model(self.AffineModel, Nit, opt2, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+        self.AffineModel = self.train_model(self.AffineModel, Nit, opt2)
         
         
     
@@ -229,13 +218,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Polynomial3 Mapping (lr, #it) =',str((lr, Nit)),'...')
-        if self.linked:
-                self.Polynomial3Model = self.train_model(self.Polynomial3Model, Nit, opt, self.ch1.pos, self.ch2.pos)
-        elif self.Neighbours:
-                self.Polynomial3Model = self.train_model(self.Polynomial3Model, Nit, opt, self.ch1.NNpos, self.ch2.NNpos)
-        else:
-            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+        self.Polynomial3Model = self.train_model(self.Polynomial3Model, Nit, opt)
         
     
     def Transform_Polynomial3(self):
@@ -273,39 +256,38 @@ class Registration(Plot):
         x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
         self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
         
-        ## Create Nearest Neighbours        
-        (ch2_input, ch1_input) = ([],[])
+        ## Create Nearest Neighbours       
         if self.linked:
             #for batch in range(len(self.ch1.pos)):
             ## Create variables normalized by gridsize
-            ch2_input.append( tf.Variable( tf.stack([
+            ch2_input = tf.Variable( tf.stack([
                 self.ch2.pos[:,0] / gridsize - self.x1_min + edge_grids,
                 self.ch2.pos[:,1] / gridsize - self.x2_min + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False) )
-            ch1_input.append( tf.Variable( tf.stack([
+                ], axis=-1), dtype=tf.float32, trainable=False) 
+            ch1_input = tf.Variable( tf.stack([
                 self.ch1.pos[:,0] / gridsize - self.x1_min + edge_grids,
                 self.ch1.pos[:,1] / gridsize - self.x2_min + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False) )
+                ], axis=-1), dtype=tf.float32, trainable=False)
         else:
             #for batch in range(len(self.ch1.pos)):
             ## Create variables normalized by gridsize
-            ch2_input.append( tf.Variable( tf.stack([
+            ch2_input = tf.Variable( tf.stack([
                 self.ch2.NNpos / gridsize - self.x1_min + edge_grids,
                 self.ch2.NNpos / gridsize - self.x2_min + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False) )
-            ch1_input.append( tf.Variable( tf.stack([
+                ], axis=-1), dtype=tf.float32, trainable=False)
+            ch1_input = tf.Variable( tf.stack([
                 self.ch1.NNpos / gridsize - self.x1_min + edge_grids,
                 self.ch1.NNpos / gridsize - self.x2_min + edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False) )
+                ], axis=-1), dtype=tf.float32, trainable=False)
             
         ## initialize optimizer
         opt=tf.optimizers.Adagrad(lr)
         self.SplinesModel=CatmullRomSpline2D(self.ControlPoints, direct=self.linked)
         
         ## Training the Model
-        print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, Nit, gridsize)),'...') 
+        print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, Nit, gridsize)),'...')
         self.SplinesModel = self.train_model(self.SplinesModel, Nit, opt, ch1_input, ch2_input)
-        self.ControlPoints=self.SplinesModel.ControlPoints
+        self.ControlPoints = self.SplinesModel.ControlPoints
                 
     
     def Transform_Splines(self):

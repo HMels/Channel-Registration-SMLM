@@ -8,14 +8,14 @@ import copy
 import pandas as pd
 import tensorflow as tf
 import numpy as np
-from photonpy import PostProcessMethods, Context
+from photonpy import PostProcessMethods, Context, Dataset
 
 from Channel import Channel        
 from Registration import Registration
 
 
 #%% Dataset
-class Dataset(Registration):
+class dataset(Registration):
     def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512]):
         self.path=path
         self.pix_size=pix_size
@@ -36,10 +36,8 @@ class Dataset(Registration):
         data2 = np.array(ch2[['X(nm)','Y(nm)', 'Pos','Int (Apert.)']])
         data2 = np.column_stack((data2, np.arange(data2.shape[0])))
     
-        self.ch1 = Channel(pos = data1[:,:2], frame = data1[:,2])
-        self.ch2 = Channel(pos = data2[:,:2], frame = data2[:,2])
-        self.ch1.pos.assign(self.ch1.pos * self.pix_size)
-        self.ch2.pos.assign(self.ch2.pos * self.pix_size)
+        self.ch1 = Channel(pos = data1[:,:2]* self.pix_size, frame = data1[:,2])
+        self.ch2 = Channel(pos = data2[:,:2]* self.pix_size, frame = data2[:,2])
         
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
@@ -62,10 +60,8 @@ class Dataset(Registration):
         else:
             raise TypeError('Path invalid')
         
-        self.ch1 = Channel(pos = ch1.pos, frame = ch1.frame)
-        self.ch2 = Channel(pos = ch2.pos, frame = ch2.frame)
-        self.ch1.pos.assign(self.ch1.pos * self.pix_size)
-        self.ch2.pos.assign(self.ch2.pos * self.pix_size)
+        self.ch1 = Channel(pos = ch1.pos* self.pix_size, frame = ch1.frame)
+        self.ch2 = Channel(pos = ch2.pos* self.pix_size, frame = ch2.frame)
         
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
@@ -92,6 +88,7 @@ class Dataset(Registration):
         self.ch1.pos.assign(self.ch1.pos - self.mid[None,:])
         self.ch2.pos.assign(self.ch2.pos - self.mid[None,:])
         self.ch2_original.pos.assign(self.ch2_original.pos - self.mid[None,:])
+        self.img, self.imgsize, self.mid = self.imgparams() 
         self.mid = tf.Variable([0,0], dtype=tf.float32)
         
         
@@ -156,7 +153,7 @@ class Dataset(Registration):
     def SubsetWindow(self, subset):
     # loading subset of dataset by creating a window of size subset 
         print('Taking a subset of size',subset,'...')
-        if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
+        #if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
         
         self.img, self.imgsize, self.mid = self.imgparams()
         l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
@@ -172,7 +169,7 @@ class Dataset(Registration):
         
     def SubsetRandom(self, subset):
     # loading subset of dataset by taking a random subset
-        if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
+        #if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
         if self.linked:
             mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=mask1
@@ -185,7 +182,7 @@ class Dataset(Registration):
         
     def SplitDataset(self):
     # Splits dataset into 2 halves for cross validation
-        if len(self.ch1.pos)>1: raise ValueError('SplitDataset should be used before creating batches!')
+        #if len(self.ch1.pos)>1: raise ValueError('SplitDataset should be used before creating batches!')
         if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
         
         N1=self.ch1.pos.shape[0]
