@@ -39,8 +39,7 @@ if True: #% Load Excel
 
 
 #%% Params
-pair_filter = [250, 30]
-DS1.developer_mode = False
+pair_filter = [500, 30]
 
 #%% generate NN
 if not DS1.linked: 
@@ -59,17 +58,17 @@ DS1.Train_Shift(lr=100, Nit=100)
 DS1.Transform_Shift()
 
 #%% Affine Transform
-#DS1.Filter_Pairs(pair_filter[0])
-#DS1.Train_Affine(lr=1, Nit=500)
+DS1.Filter_Pairs(pair_filter[0])
+DS1.Train_Affine(lr=1, Nit=500)
 DS1.Transform_Affine()
 
 #%% CatmullRomSplines
-#DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
+DS1.Train_Splines(lr=1e-2, Nit=100, gridsize=gridsize, edge_grids=1)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 #DS1.Filter_Pairs(pair_filter[1])
 
-'''
+
 #%% Mapping DS2 (either a second dataset or the cross validation)
 if not DS1.developer_mode:
     ## Copy all mapping parameters
@@ -83,15 +82,15 @@ if not DS1.developer_mode:
     
     #%% output
     nbins=100
-    xlim=pair_filter[1]
+    xlim=pair_filter[0]
     
     ## Coupling dataset
     DS2.link_dataset(FrameLinking=True)
-    DS2.Filter_Pairs(pair_filter[1])
+    DS2.Filter_Pairs(pair_filter[0])
     
     ## Add all batches together for data processing
-    DS1.concat_batches()
-    DS2.concat_batches()
+    #DS1.concat_batches()
+    #DS2.concat_batches()
     
     ## DS1
     DS1.ErrorPlot(nbins=nbins)
@@ -110,4 +109,3 @@ if not DS1.developer_mode:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
         DS1.plot_1channel()
-'''

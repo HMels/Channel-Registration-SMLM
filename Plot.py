@@ -147,7 +147,7 @@ class Plot:
         stdy = np.std(disty)
             
         fig, ax = plt.subplots(1,2,figsize=(12,6))
-        
+
         nx = ax[0].hist(distx, label=(r'$\mu$ = '+str(round(avgx,2))+'nm, $\sigma$ = '+str(round(stdx,2))+'nm'),
                         alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         ny = ax[1].hist(disty, label=(r'$\mu$ = '+str(round(avgy,2))+'nm, $\sigma$ = '+str(round(stdy,2))+'nm'),

@@ -68,6 +68,25 @@ class Registration(Plot):
         
         
     #%% Optimization functions
+    #@tf.function
+    def train_model(self, model, Nit, opt, pos1, pos2):
+        for i in range(Nit):
+            self.train_step(model, Nit, opt, pos1,pos2)          
+        return model
+    
+    
+    #@tf.function
+    def train_step(self, model, Nit, opt, pos1, pos2):
+        with tf.GradientTape() as tape:
+            #for batch in range(len(pos1_tf)):
+            pos2_mapped = model(pos1[0], pos2[0])
+            loss = self.loss_fn(pos1[0], pos2_mapped)
+                   
+        grads = tape.gradient(loss, model.trainable_weights)
+        opt.apply_gradients(zip(grads, model.trainable_weights))
+        return loss
+    
+    
     def loss_fn(self, ch1, ch2):
         if self.linked:
             loss = ( tf.reduce_sum(tf.square(ch1-ch2)) )
@@ -76,31 +95,12 @@ class Registration(Plot):
             D_KL = 0.5*tf.reduce_sum( tf.square(ch1 - ch2) / CRLB**2 , axis=2)
             loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[1] ) / ch2.shape[0] , axis = 1) ) ) 
         return loss
-
-    @tf.function
-    def train_step(self, model, Nit, opt, pos1, pos2):
-        for i in range(Nit):
-            #loss = 0
-            with tf.GradientTape() as tape:
-                #for batch in range(len(pos1_tf)):
-                pos2_mapped = model(pos1[0], pos2[0])
-                loss = self.loss_fn(pos1[0], pos2_mapped)
-                     
-            grads = tape.gradient(loss, model.trainable_weights)
-            opt.apply_gradients(zip(grads, model.trainable_weights))
-        return model.trainable_weights
-    
-    
-    def train_model(self, model, Nit, opt, pos1, pos2):
-    # The training loop of the model
-        model.trainable_weights = self.train_model(model, Nit, opt, pos1, pos2)
-        return model 
             
     
     #%% Global Transforms (Affine, Polynomial3, RigidBody)
     ## Shift
     #@tf.function
-    def Train_Shift(self, lr=1, Nit=200):
+    def Train_Shift(self, lr=100, Nit=100):
     # Training the RigidBody Mapping
         #if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
@@ -123,47 +123,59 @@ class Registration(Plot):
         print('Transforming Shift Mapping...')
         if self.ShiftModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            for batch in range(len(self.ch1.pos)):
-                self.ch2.pos[batch]=self.ShiftModel.transform_vec((self.ch2.pos[batch]))
-                if np.isnan( self.ch2.pos[batch] ).any(): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
+            #for batch in range(len(self.ch1.pos)):
+                self.ch2.pos.assign(self.ShiftModel.transform_vec((self.ch2.pos)))
+                if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
     
     
     ## RigidBody
     def Train_RigidBody(self, lr=1, Nit=200):
     # Training the RigidBody Mapping
-        if self.RidigBodyModel is not None: raise Exception('Models can only be trained once')
-        if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+        if self.RigidBodyModel is not None: raise Exception('Models can only be trained once')
+        if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
         self.RigidBodyModel=RigidBodyModel(direct=self.linked)
-        opt=tf.optimizers.Adagrad(lr)
+        opt1=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
+        print('Training RigidBody Mapping (lr, #it) =',str((lr, Nit)),'...')
         if self.linked:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt, self.ch1.pos, self.ch2.pos)
+                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt1, self.ch1.pos, self.ch2.pos)
         elif self.Neighbours:
-                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt, self.ch1.NNpos, self.ch2.NNpos)
+                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt1, self.ch1.NNpos, self.ch2.NNpos)
         else:
             raise Exception('Dataset is not linked but no Neighbours have been generated yet')
         
+        ## then train the d vector (shift)
+        self.RigidBodyModel.d._trainable=True
+        self.RigidBodyModel.cos._trainable=False
+        opt2=tf.optimizers.Adagrad(lr)
+        # Training the Model
+        if self.linked:
+                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt2, self.ch1.pos, self.ch2.pos)
+        elif self.Neighbours:
+                self.RigidBodyModel = self.train_model(self.RigidBodyModel, Nit, opt2, self.ch1.NNpos, self.ch2.NNpos)
+        else:
+            raise Exception('Dataset is not linked but no Neighbours have been generated yet')
+
     
     def Transform_RigidBody(self):
     # Transforms ch2 according to the Model
         if self.RigidBodyModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-            for batch in range(len(self.ch1.pos)):
-                print('Transforming RigidBody Mapping...')
-                self.ch2.pos[batch]=self.RigidBodyModel.transform_vec((self.ch2.pos[batch]))
-                if np.isnan( self.ch2.pos[batch] ).any(): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
+            if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            #for batch in range(len(self.ch1.pos)):
+            print('Transforming RigidBody Mapping...')
+            self.ch2.pos.assign(self.RigidBodyModel.transform_vec((self.ch2.pos)))
+            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
         
         
     ## Affine
     def Train_Affine(self, lr=1, Nit=200):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
-        if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+        if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
         self.AffineModel=AffineModel(direct=self.linked)
@@ -174,7 +186,6 @@ class Registration(Plot):
         opt1=tf.optimizers.Adagrad(lr)
         
         ## Training the Model for A
-        print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
         if self.linked:
                 self.AffineModel = self.train_model(self.AffineModel, Nit, opt1, self.ch1.pos, self.ch2.pos)
         elif self.Neighbours:
@@ -188,7 +199,6 @@ class Registration(Plot):
         self.AffineModel.A._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
         if self.linked:
                 self.AffineModel = self.train_model(self.AffineModel, Nit, opt2, self.ch1.pos, self.ch2.pos)
         elif self.Neighbours:
@@ -202,11 +212,11 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         if self.AffineModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if self.mid.all() != 0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-            for batch in range(len(self.ch1.pos)):
-                print('Transforming Affine Mapping...')
-                self.ch2.pos[batch]=self.AffineModel.transform_vec((self.ch2.pos[batch]))
-                if np.isnan( self.ch2.pos[batch] ).any(): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
+            if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            #for batch in range(len(self.ch1.pos)):
+            print('Transforming Affine Mapping...')
+            self.ch2.pos.assign(self.AffineModel.transform_vec((self.ch2.pos)))
+            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
       
         
     ## Polynomial3
@@ -219,7 +229,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
+        print('Training Polynomial3 Mapping (lr, #it) =',str((lr, Nit)),'...')
         if self.linked:
                 self.Polynomial3Model = self.train_model(self.Polynomial3Model, Nit, opt, self.ch1.pos, self.ch2.pos)
         elif self.Neighbours:
@@ -233,9 +243,9 @@ class Registration(Plot):
         print('Transforming Polynomial3 Mapping...')
         if self.Polynomial3Model is None: print('Model not trained yet, will pass without transforming.')
         else:
-            for batch in range(len(self.ch1.pos)):
-                self.ch2.pos[batch]=self.Polynomial3Model.transform_vec((self.ch2.pos[batch]))
-                if np.isnan( self.ch2.pos[batch] ).any(): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
+            #for batch in range(len(self.ch1.pos)):
+            self.ch2.pos.assign(self.Polynomial3Model.transform_vec((self.ch2.pos)))
+            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
         
         
     #%% CatmullRom Splines
@@ -246,11 +256,11 @@ class Registration(Plot):
         
         ## Generate the borders of the system
         (x1_min, x2_min, x1_max, x2_max) = ([],[],[],[])
-        for batch in range(len(self.ch1.pos)):
-            x1_min.append( tf.reduce_min(tf.floor(self.ch2.pos[batch][:,0])) )
-            x2_min.append( tf.reduce_min(tf.floor(self.ch2.pos[batch][:,1])) )
-            x1_max.append( tf.reduce_max(tf.floor(self.ch2.pos[batch][:,0])) )
-            x2_max.append( tf.reduce_max(tf.floor(self.ch2.pos[batch][:,1])) )
+        #for batch in range(len(self.ch1.pos)):
+        x1_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,0])) )
+        x2_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,1])) )
+        x1_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,0])) )
+        x2_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,1])) )
         self.x1_min = np.min(x1_min) / gridsize
         self.x2_min = np.min(x2_min) / gridsize
         self.x1_max = np.max(x1_max) / gridsize
@@ -266,27 +276,27 @@ class Registration(Plot):
         ## Create Nearest Neighbours        
         (ch2_input, ch1_input) = ([],[])
         if self.linked:
-            for batch in range(len(self.ch1.pos)):
-                ## Create variables normalized by gridsize
-                ch2_input.append( tf.Variable( tf.stack([
-                    self.ch2.pos[batch][:,0] / gridsize - self.x1_min + edge_grids,
-                    self.ch2.pos[batch][:,1] / gridsize - self.x2_min + edge_grids
-                    ], axis=-1), dtype=tf.float32, trainable=False) )
-                ch1_input.append( tf.Variable( tf.stack([
-                    self.ch1.pos[batch][:,0] / gridsize - self.x1_min + edge_grids,
-                    self.ch1.pos[batch][:,1] / gridsize - self.x2_min + edge_grids
-                    ], axis=-1), dtype=tf.float32, trainable=False) )
+            #for batch in range(len(self.ch1.pos)):
+            ## Create variables normalized by gridsize
+            ch2_input.append( tf.Variable( tf.stack([
+                self.ch2.pos[:,0] / gridsize - self.x1_min + edge_grids,
+                self.ch2.pos[:,1] / gridsize - self.x2_min + edge_grids
+                ], axis=-1), dtype=tf.float32, trainable=False) )
+            ch1_input.append( tf.Variable( tf.stack([
+                self.ch1.pos[:,0] / gridsize - self.x1_min + edge_grids,
+                self.ch1.pos[:,1] / gridsize - self.x2_min + edge_grids
+                ], axis=-1), dtype=tf.float32, trainable=False) )
         else:
-            for batch in range(len(self.ch1.pos)):
-                ## Create variables normalized by gridsize
-                ch2_input.append( tf.Variable( tf.stack([
-                    self.ch2.NNpos[batch] / gridsize - self.x1_min + edge_grids,
-                    self.ch2.NNpos[batch] / gridsize - self.x2_min + edge_grids
-                    ], axis=-1), dtype=tf.float32, trainable=False) )
-                ch1_input.append( tf.Variable( tf.stack([
-                    self.ch1.NNpos[batch] / gridsize - self.x1_min + edge_grids,
-                    self.ch1.NNpos[batch] / gridsize - self.x2_min + edge_grids
-                    ], axis=-1), dtype=tf.float32, trainable=False) )
+            #for batch in range(len(self.ch1.pos)):
+            ## Create variables normalized by gridsize
+            ch2_input.append( tf.Variable( tf.stack([
+                self.ch2.NNpos / gridsize - self.x1_min + edge_grids,
+                self.ch2.NNpos / gridsize - self.x2_min + edge_grids
+                ], axis=-1), dtype=tf.float32, trainable=False) )
+            ch1_input.append( tf.Variable( tf.stack([
+                self.ch1.NNpos / gridsize - self.x1_min + edge_grids,
+                self.ch1.NNpos / gridsize - self.x2_min + edge_grids
+                ], axis=-1), dtype=tf.float32, trainable=False) )
             
         ## initialize optimizer
         opt=tf.optimizers.Adagrad(lr)
@@ -306,18 +316,18 @@ class Registration(Plot):
             if self.gridsize is None: raise Exception('No Grid has been generated yet')
             
             ch2_input=[]
-            for batch in range(len(self.ch1.pos)):
-                    ## Create variables normalized by gridsize
-                    ch2_input.append( tf.Variable( tf.stack([
-                        self.ch2.pos[batch][:,0] / self.gridsize - self.x1_min + self.edge_grids,
-                        self.ch2.pos[batch][:,1] / self.gridsize - self.x2_min + self.edge_grids
-                        ], axis=-1), dtype=tf.float32, trainable=False) )
+            #for batch in range(len(self.ch1.pos)):
+            ## Create variables normalized by gridsize
+            ch2_input = tf.Variable( tf.stack([
+                self.ch2.pos[:,0] / self.gridsize - self.x1_min + self.edge_grids,
+                self.ch2.pos[:,1] / self.gridsize - self.x2_min + self.edge_grids
+                ], axis=-1), dtype=tf.float32, trainable=False) 
                 
             # transform the new ch2 model
-            for batch in range(len(self.ch1.pos)):
-                ch2_mapped = np.array( self.SplinesModel.transform_vec(ch2_input[batch]) ) 
-                self.ch2.pos[batch]=np.stack([
-                    (ch2_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
-                    (ch2_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
-                    ], axis=-1)
-                if np.isnan( self.ch2.pos[batch] ).any(): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
+            #for batch in range(len(self.ch1.pos)):
+            ch2_mapped =  self.SplinesModel.transform_vec(ch2_input) 
+            self.ch2.pos.assign(tf.stack([
+                (ch2_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
+                (ch2_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
+                ], axis=-1))
+            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')

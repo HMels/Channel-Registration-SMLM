@@ -9,13 +9,13 @@ import tensorflow as tf
 #%% Channel 
 class Channel:
     def __init__(self, pos=None, frame=None):
-        self.pos = [tf.Variable(pos, dtype=tf.float32, trainable=False)] if pos is not None else {}
-        self.frame = [tf.Variable(frame, dtype=tf.float32, trainable=False)] if frame is not None else {}
+        self.pos = tf.Variable(pos, dtype=tf.float32, trainable=False) if pos is not None else {}
+        self.frame = tf.Variable(frame, dtype=tf.float32, trainable=False) if frame is not None else {}
         self.img, self.imgsize, self.mid = self.imgparams()
         
         
     def pos_all(self):
-        return tf.concat(self.pos, axis=0)
+        return self.pos.numpy() #tf.concat(self.pos, axis=0)
         
     
     def imgparams(self):
@@ -28,13 +28,13 @@ class Channel:
     def SplitFrames(self):
         print('Splitting Dataset into different frames...')
         if len(self.pos)>1: raise ValueError('Dataset already split in batches')
-        frames,_ = tf.unique(self.frame[0])
+        frames,_ = tf.unique(self.frame)
         (pos,frame)=([],[])
         for fr in frames:
-            idx = tf.where(self.frame[0]==fr)
-            pos.append( tf.squeeze(tf.gather(self.pos[0],idx,axis=0), axis=1) )
-            frame.append( self.frame[0][idx] )
-        self.pos = pos
+            idx = tf.where(self.frame==fr)
+            pos.append( tf.squeeze(tf.gather(self.pos,idx,axis=0), axis=1) )
+            frame.append( self.frame[idx] )
+        self.pos.assign( pos )
         self.frame = frame
         
         
@@ -44,6 +44,6 @@ class Channel:
         self.NNpos=[]
         for batch in range(len(self.pos)):
             NN=[]
-            for nn in idxlist[batch]:
-                NN.append(tf.gather(self.pos[batch],nn,axis=0))
+            for nn in idxlist:
+                NN.append(tf.gather(self.pos,nn,axis=0))
             self.NNpos.append( tf.stack(NN, axis=1) )

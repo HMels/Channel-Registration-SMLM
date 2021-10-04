@@ -38,8 +38,8 @@ class Dataset(Registration):
     
         self.ch1 = Channel(pos = data1[:,:2], frame = data1[:,2])
         self.ch2 = Channel(pos = data2[:,:2], frame = data2[:,2])
-        self.ch1.pos[0].assign(self.ch1.pos[0] * self.pix_size)
-        self.ch2.pos[0].assign(self.ch2.pos[0] * self.pix_size)
+        self.ch1.pos.assign(self.ch1.pos * self.pix_size)
+        self.ch2.pos.assign(self.ch2.pos * self.pix_size)
         
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
@@ -47,20 +47,25 @@ class Dataset(Registration):
     
     
     def load_dataset_hdf5(self):
-        data = pd.read_csv(self.path)
-        grouped = data.groupby(data.Channel)
-        ch1 = grouped.get_group(1)
-        ch2 = grouped.get_group(2)
+        ## Loading dataset
+        if len(self.path)==1 or isinstance(self.path,str):
+            # Dataset is grouped, meaning it has to be split manually
+            print('Loading dataset... \n Grouping...')
+            ds = Dataset.load(self.path[0],saveGroups=True)
+            ch1 = ds[ds.group==0]
+            ch2 = ds[ds.group==1]
+        elif len(self.path)==2:
+            # Dataset consists over 2 files
+            print('Loading dataset...')
+            ch1 = Dataset.load(self.path[0])
+            ch2 = Dataset.load(self.path[1])
+        else:
+            raise TypeError('Path invalid')
         
-        data1 = np.array(ch1[['X(nm)','Y(nm)', 'Pos','Int (Apert.)']])
-        data1 = np.column_stack((data1, np.arange(data1.shape[0])))
-        data2 = np.array(ch2[['X(nm)','Y(nm)', 'Pos','Int (Apert.)']])
-        data2 = np.column_stack((data2, np.arange(data2.shape[0])))
-    
-        self.ch1 = Channel(pos = data1[:,:2], frame = data1[:,2])
-        self.ch2 = Channel(pos = data2[:,:2], frame = data2[:,2])
-        self.ch1.pos[0].assign(self.ch1.pos[0] * self.pix_size)
-        self.ch2.pos[0].assign(self.ch2.pos[0] * self.pix_size)
+        self.ch1 = Channel(pos = ch1.pos, frame = ch1.frame)
+        self.ch2 = Channel(pos = ch2.pos, frame = ch2.frame)
+        self.ch1.pos.assign(self.ch1.pos * self.pix_size)
+        self.ch2.pos.assign(self.ch2.pos * self.pix_size)
         
         self.ch2_original=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
@@ -83,11 +88,11 @@ class Dataset(Registration):
     
     def center_image(self):
         self.img, self.imgsize, self.mid = self.imgparams() 
-        for batch in range(len(self.ch1.pos)):
-            self.ch1.pos[batch] = self.ch1.pos[batch] - self.mid[None,:]
-            self.ch2.pos[batch] = self.ch2.pos[batch] - self.mid[None,:]
-            self.ch2_original.pos[batch] = self.ch2_original.pos[batch] - self.mid[None,:]
-        self.img, self.imgsize, self.mid = self.imgparams() 
+        #for batch in range(len(self.ch1.pos)):
+        self.ch1.pos.assign(self.ch1.pos - self.mid[None,:])
+        self.ch2.pos.assign(self.ch2.pos - self.mid[None,:])
+        self.ch2_original.pos.assign(self.ch2_original.pos - self.mid[None,:])
+        self.mid = tf.Variable([0,0], dtype=tf.float32)
         
         
     #%% pair_functions
@@ -96,24 +101,28 @@ class Dataset(Registration):
     # links dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
         print('Linking datasets...')
-        if len(self.ch1.pos)>1: raise Exception('Dataset should be linked before splitting!')
+        #if len(self.ch1.pos)>1: raise Exception('Cannot link after splitting!')
+        ch1_frame=self.ch1.frame.numpy()
+        ch2_frame=self.ch2.frame.numpy()
+        ch1_pos=self.ch1.pos.numpy()
+        ch2_pos=self.ch2.pos.numpy()
         
         (locsB,frameB)=([],[])
-        for i in range(self.ch1.pos[0].shape[0]):
+        for i in range(ch1_pos.shape[0]):
             if FrameLinking:
-                sameframe_idx = tf.where(self.ch2.frame[0]==self.ch1.frame[0][i])
-                sameframe_pos = tf.gather(self.ch2.pos[0], sameframe_idx, axis=0)
-                dists = tf.sqrt(tf.reduce_sum((self.ch1.pos[0][i,:]-sameframe_pos)**2,axis=1))
+                sameframe_pos = ch2_pos[ch2_frame==ch1_frame[i],:]
+                dists = np.sqrt(np.sum((ch1_pos[i,:]-sameframe_pos)**2,1))
             
-                iB=tf.argmin(dists)
-                locsB.append(tf.gather(sameframe_pos, iB, axis=0))
-                frameB.append(self.ch1.frame[0][i])
+                iB=np.argmin(dists)
+                locsB.append(sameframe_pos[iB,:])
+                frameB.append(ch1_frame[i])
             else:
-                dists = tf.sqrt(tf.reduce_sum((self.ch1.pos[0][i,:]-self.ch2.pos[0])**2,axis=1))
-                iB=tf.argmin(dists)
-                print(dists.shape, iB)
-                locsB.append(tf.gather(self.ch2.pos[0], iB, axis=0))
-                frameB.append(self.ch2.frame[0][iB])
+                dists = np.sqrt(np.sum((ch1_pos[i,:]-ch2_pos)**2,1))
+                iB=np.argmin(dists)
+                locsB.append(ch2_pos[iB,:])
+                frameB.append(ch2_frame[iB])
+            
+        if not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
         
         del self.ch2
         self.ch2 = Channel(locsB, frameB)
@@ -125,17 +134,22 @@ class Dataset(Registration):
         print('Filtering pairs above',maxDist,'nm...')
         if not self.linked: raise Exception('Dataset should be linked before filtering pairs')
         
-        for batch in range(len(self.ch1.pos)):
-            dists = tf.sqrt(tf.reduce_sum( (self.ch1.pos[batch] - self.ch2.pos[batch])**2 ,axis=1))
-            idx = tf.where(dists<maxDist)
-            
-            if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
-            self.ch1.pos[batch].assign( tf.gather(self.ch1.pos[batch],idx,axis=1) )
-            self.ch2.pos[batch].assign( tf.gather(self.ch2.pos[batch],idx,axis=1) )
-            self.ch2_original.pos[batch].assign( tf.gather(self.ch2_original.pos[batch],idx,axis=1) )
-            self.ch1.frame[batch].assign( tf.gather(self.ch1.frame[batch],idx,axis=1) )
-            self.ch2.frame[batch].assign( tf.gather(self.ch2.frame[batch],idx,axis=1) )
-            self.ch2_original.frame[batch].assign( tf.gather(self.ch2_original.frame[batch],idx,axis=1) )
+        dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 ,axis=1))
+        idx = np.argwhere(dists<maxDist)
+        if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
+        
+        ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
+        ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
+        ch2_original_pos = self.ch2_original.pos.numpy()[idx[:,0],:]
+        ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
+        ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
+        ch2_original_frame = self.ch2_original.frame.numpy()[idx[:,0]]
+        
+        del self.ch1, self.ch2, self.ch2_original
+        self.ch1 = Channel(ch1_pos, ch1_frame)
+        self.ch2 = Channel(ch2_pos, ch2_frame)
+        self.ch2_original = Channel(ch2_original_pos, ch2_original_frame)
+        
         
         
     #%% Split dataset or load subset
@@ -148,10 +162,10 @@ class Dataset(Registration):
         l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
         r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
     
-        mask1 = np.where( (self.ch1.pos[0][:,0] >= l_grid[0]) * (self.ch1.pos[0][:,1] >= l_grid[1])
-                            * (self.ch1.pos[0][:,0] <= r_grid[0]) * (self.ch1.pos[0][:,1] <= r_grid[1]) , True, False)
-        mask2 = np.where( (self.ch2.pos[0][:,0] >= l_grid[0]) * (self.ch2.pos[0][:,1] >= l_grid[1])
-                            * (self.ch2.pos[0][:,0] <= r_grid[0]) * (self.ch2.pos[0][:,1] <= r_grid[1]), True, False )
+        mask1 = np.where( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
+                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]) , True, False)
+        mask2 = np.where( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
+                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]), True, False )
 
         self = self.gather(mask1, mask2)
         
@@ -160,11 +174,11 @@ class Dataset(Registration):
     # loading subset of dataset by taking a random subset
         if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
         if self.linked:
-            mask1=np.random.choice(self.ch1.pos[0].shape[0], int(self.ch1.pos[0].shape[0]*subset))
+            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=mask1
         else:
-            mask1=np.random.choice(self.ch1.pos[0].shape[0], int(self.ch1.pos[0].shape[0]*subset))
-            mask2=np.random.choice(self.ch2.pos[0].shape[0], int(self.ch2.pos[0].shape[0]*subset))
+            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
+            mask2=np.random.choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
             
         self = self.gather(mask1, mask2)
         
@@ -174,8 +188,8 @@ class Dataset(Registration):
         if len(self.ch1.pos)>1: raise ValueError('SplitDataset should be used before creating batches!')
         if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
         
-        N1=self.ch1.pos[0].shape[0]
-        N2=self.ch2.pos[0].shape[0]
+        N1=self.ch1.pos.shape[0]
+        N2=self.ch2.pos.shape[0]
         if self.linked:
             if N1!=N2: raise Exception('Datasets are linked but not equal in size')
             mask1=np.ones(N1, dtype=bool)
@@ -214,9 +228,9 @@ class Dataset(Registration):
         other = copy.deepcopy(self)
         
         del other.ch1, other.ch2, other.ch2_original
-        other.ch1 = Channel(pos=tf.gather(self.ch1.pos[0],idx1,axis=0), frame=self.ch1.frame[0][idx1])
-        other.ch2 = Channel(pos=tf.gather(self.ch2.pos[0],idx2,axis=0), frame=self.ch2.frame[0][idx2])
-        other.ch2_original = Channel(pos=tf.gather(self.ch2_original.pos[0],idx2,axis=0), frame=self.ch2.frame[0][idx2])
+        other.ch1 = Channel(pos=tf.gather(self.ch1.pos,idx1,axis=0), frame=self.ch1.frame[idx1])
+        other.ch2 = Channel(pos=tf.gather(self.ch2.pos,idx2,axis=0), frame=self.ch2.frame[idx2])
+        other.ch2_original = Channel(pos=tf.gather(self.ch2_original.pos,idx2,axis=0), frame=self.ch2.frame[idx2])
         return other
     
     
@@ -225,14 +239,14 @@ class Dataset(Registration):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
         (idx1list, idx2list) = ([],[])
-        for batch in range(len(self.ch1.pos)):
-            try:
-                idx1, idx2 = self.find_BrightNN(self.ch1.pos[batch].numpy(), self.ch2.pos[batch].numpy(), maxDistance=maxDistance, threshold=k)
-            except Exception:
-                print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
-                idx1, idx2 = self.find_kNN(self.ch1.pos[batch].numpy(), self.ch2.pos[batch].numpy(), k)
-            idx1list.append(idx1)
-            idx2list.append(idx2)
+        #for batch in range(len(self.ch1.pos)):
+        try:
+            idx1, idx2 = self.find_BrightNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), maxDistance=maxDistance, threshold=k)
+        except Exception:
+            print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
+            idx1, idx2 = self.find_kNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), k)
+        idx1list.append(idx1)
+        idx2list.append(idx2)
             
         self.ch1.load_NN_matrix(idx1list)
         self.ch2.load_NN_matrix(idx2list)
