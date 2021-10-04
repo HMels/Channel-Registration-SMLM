@@ -20,7 +20,7 @@ if False: #% Load Beads
     gridsize=200
 
 
-if True: #% Load Clusters
+if False: #% Load Clusters
     DS1 = Dataset_hdf5([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
                         'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
                        align_rcc=False, coupled=False, pix_size=159)
@@ -30,7 +30,7 @@ if True: #% Load Clusters
     gridsize=1000
     
 
-if False: #% Load Excel
+if True: #% Load Excel
     DS1 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                         align_rcc=False, coupled=False)
     DS2 = Dataset_excel('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
@@ -76,8 +76,8 @@ DS1.Transform_Shift()
 
 #%% Affine Transform
 DS1.Filter_Pairs(pair_filter[0])
-DS1.Train_Affine(lr=1, Nit=500)
-DS1.Transform_Affine()
+#DS1.Train_Affine(lr=1, Nit=500)
+#DS1.Transform_Affine()
 
 
 #%% CatmullRomSplines
@@ -86,7 +86,6 @@ DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 DS1.Filter_Pairs(pair_filter[1])
 
-
 #%% Mapping DS2 (either a second dataset or the cross validation)
 if not DS1.developer_mode:
     ## Copy all mapping parameters
@@ -94,7 +93,7 @@ if not DS1.developer_mode:
     
     ## Shift and Affine transform
     DS2.Transform_Shift()
-    DS2.Transform_Affine()
+    #DS2.Transform_Affine()
     
     ## Splines transform
     DS2.reload_splines()
@@ -119,7 +118,8 @@ if not DS1.developer_mode:
     
     #%% image
     ## Image overview
-    if True:
+    if False:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
         DS1.plot_1channel()
+        
