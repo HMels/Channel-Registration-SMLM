@@ -68,13 +68,13 @@ class Registration(Plot):
         
         
     #%% Optimization functions
-    def train_model(self, model, Nit, opt, pos1=None, pos2=None, frame=True):
+    def train_model(self, model, Nit, opt, pos1=None, pos2=None, frame=False):
         ## Initializing the training loop
         if pos1 is None and pos2 is None:
             if self.linked:
                     pos1, pos2 = self.ch1.pos, self.ch2.pos
             elif self.Neighbours:
-                    pos1, pos2 = self.ch1.NNpos, self.ch2.NNpos
+                    pos1, pos2 = self.ch1NN.pos, self.ch2NN.pos
             else:
                 raise Exception('Dataset is not linked but no Neighbours have been generated yet')
            
@@ -103,8 +103,10 @@ class Registration(Plot):
             for fr in frame: # work with batches 
                 idx1=tf.where(self.ch1.frame==fr)
                 idx2=tf.where(self.ch2.frame==fr)
-                pos1_fr=tf.gather(pos1,idx1[:,0],axis=0) 
-                pos2_fr=tf.gather(pos2,idx2[:,0],axis=0) 
+            
+                print(pos1.shape, idx1)
+                pos1_fr=tf.gather_nd(pos1,idx1)
+                pos2_fr=tf.gather_nd(pos2,idx2)
                 
                 with tf.GradientTape() as tape:
                     loss=self.loss_fn(model,pos1_fr,pos2_fr) 
@@ -114,7 +116,7 @@ class Registration(Plot):
         return loss
     
     
-    @tf.function(experimental_relax_shapes=True)
+    #@tf.function(experimental_relax_shapes=True)
     def loss_fn(self, model, pos1, pos2):
     # The metric that will be optimized
         pos2 = model(pos1, pos2)
@@ -288,12 +290,12 @@ class Registration(Plot):
             #for batch in range(len(self.ch1.pos)):
             ## Create variables normalized by gridsize
             ch2_input = tf.Variable( tf.stack([
-                self.ch2.NNpos / gridsize - self.x1_min + edge_grids,
-                self.ch2.NNpos / gridsize - self.x2_min + edge_grids
+                self.ch2NN.pos / gridsize - self.x1_min + edge_grids,
+                self.ch2NN.pos / gridsize - self.x2_min + edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False)
             ch1_input = tf.Variable( tf.stack([
-                self.ch1.NNpos / gridsize - self.x1_min + edge_grids,
-                self.ch1.NNpos / gridsize - self.x2_min + edge_grids
+                self.ch1NN.pos / gridsize - self.x1_min + edge_grids,
+                self.ch1NN.pos / gridsize - self.x2_min + edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False)
             
         ## initialize optimizer

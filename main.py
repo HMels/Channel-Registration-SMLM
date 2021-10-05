@@ -33,7 +33,7 @@ if False: #% Load Excel
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv', linked=False, pix_size=1)
     DS1.load_dataset_excel()
     DS2.load_dataset_excel()
-    DS1.link_dataset(FrameLinking=True)
+    #DS1.link_dataset(FrameLinking=True)
     #DS1.SplitFrames()
     gridsize=3000
 
@@ -49,6 +49,7 @@ if not DS1.linked:
 
 
 #%% Shift Transform
+DS1.ShiftModel=None
 DS1.Train_Shift(lr=100, Nit=1)
 DS1.Transform_Shift()
 

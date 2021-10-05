@@ -24,14 +24,4 @@ class Channel:
                            [ tf.reduce_max(pos[:,0]),  tf.reduce_max(pos[:,1]) ]], dtype=tf.float32)
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
         
-        
-    def load_NN_matrix(self, idxlist):
-    # Takes the indexes for channel 1 and 2 and loads the matrix
-        print(len(idxlist),self.pos.shape[0])
-        if self.pos.shape[0]!=len(idxlist): raise ValueError('idxlist should be same size as the positions')
-        self.NNpos=[]
-        for batch in range(len(self.pos)):
-            NN=[]
-            for nn in idxlist:
-                NN.append(tf.gather(self.pos,nn,axis=0))
-            self.NNpos.append( tf.stack(NN, axis=1) )
+       

@@ -232,18 +232,60 @@ class dataset(Registration):
     
     
     #%% Generate Neighbours
-    def find_neighbours(self, maxDistance=50, k=20):
+    def find_neighbours(self, maxDistance=50, k=20, FrameLinking=False):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
-        try:
-            idx1, idx2 = self.find_BrightNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), maxDistance=maxDistance, threshold=k)
-        except Exception:
-            print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
-            idx1, idx2 = self.find_kNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), k)
+        ch1_frame=self.ch1.frame
+        ch2_frame=self.ch2.frame
+        ch1_pos=self.ch1.pos
+        ch2_pos=self.ch2.pos
+        
+        
+        if FrameLinking: ## Neighbours per frame
+            frame,_=tf.unique(self.ch1.frame)
+            (pos1, frame1, pos2, frame2) = ([],[],[],[])
+            for fr in frame:
+                framepos1 = ch1_pos.numpy()[ch1_frame.numpy()==fr,:]
+                framepos2 = ch2_pos.numpy()[ch2_frame.numpy()==fr,:]
+                
+                try: ################# idx1_fr and idx2_fr do not refer to ch1 and ch2
+                    idx1, idx2 = self.find_BrightNN(framepos1, framepos2, maxDistance=maxDistance, threshold=k)
+                except Exception:
+                    idx1, idx2 = self.find_kNN(framepos1, framepos2, k)
+                    
+                p1, f1 = self.load_NN_matrix(idx1, ch1_pos, ch1_frame)
+                p2, f2 = self.load_NN_matrix(idx2, ch2_pos, ch2_frame)
+                pos1.append(p1)
+                pos2.append(p2)
+                frame1.append(f1)
+                frame2.append(f2)
             
-        self.ch1.load_NN_matrix(idx1)
-        self.ch2.load_NN_matrix(idx2)
+            pos1=tf.concat(pos1, axis=0)
+            pos2=tf.concat(pos2, axis=0)
+            frame1=tf.concat(frame1, axis=0)
+            frame2=tf.concat(frame2, axis=0)
+            
+        else: ## taking the whole dataset as a single batch   
+            try:
+                idx1, idx2 = self.find_BrightNN(ch1_pos.numpy(), ch2_pos.numpy(), maxDistance=maxDistance, threshold=k)
+            except Exception:
+                #print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
+                idx1, idx2 = self.find_kNN(ch1_pos.numpy(), ch2_pos.numpy(), k)
+            
+            pos1, frame1 = self.load_NN_matrix(idx1, ch1_pos, ch1_frame)
+            pos2, frame2 = self.load_NN_matrix(idx2, ch2_pos, ch2_frame)
+        
+        self.ch1NN = Channel( pos1, frame1 )
+        self.ch2NN = Channel( pos2, frame2 )
         self.Neighbours=True
+        
+        
+    def load_NN_matrix(self, idx, pos, frame):
+        (NN,fr)=([],[])
+        for nn in idx:
+            NN.append(tf.gather(pos,nn,axis=0))
+            fr.append(tf.gather(frame,nn[0]))
+        return tf.stack(NN, axis=0) , tf.stack(fr, axis=0)
         
         
     def find_BrightNN(self, pos1, pos2, maxDistance = 50, threshold = 20):
@@ -276,8 +318,6 @@ class dataset(Registration):
         else:
             self.NN_maxDist=maxDistance
             self.NN_threshold=threshold
-            
-        ## Loading the indexes as matrices
         return idx1list, idx2list
         
         
@@ -292,8 +332,6 @@ class dataset(Registration):
             idx2list.append( np.argsort( distances )[:k] )
             
         self.NN_k=k
-        
-        ## Loading the indexes as matrices
         return idx1list, idx2list
         
     
