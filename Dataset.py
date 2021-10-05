@@ -235,18 +235,14 @@ class dataset(Registration):
     def find_neighbours(self, maxDistance=50, k=20):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
-        (idx1list, idx2list) = ([],[])
-        #for batch in range(len(self.ch1.pos)):
         try:
             idx1, idx2 = self.find_BrightNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), maxDistance=maxDistance, threshold=k)
         except Exception:
             print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
             idx1, idx2 = self.find_kNN(self.ch1.pos.numpy(), self.ch2.pos.numpy(), k)
-        idx1list.append(idx1)
-        idx2list.append(idx2)
             
-        self.ch1.load_NN_matrix(idx1list)
-        self.ch2.load_NN_matrix(idx2list)
+        self.ch1.load_NN_matrix(idx1)
+        self.ch2.load_NN_matrix(idx2)
         self.Neighbours=True
         
         

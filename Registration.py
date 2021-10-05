@@ -68,7 +68,7 @@ class Registration(Plot):
         
         
     #%% Optimization functions
-    def train_model(self, model, Nit, opt, pos1=None, pos2=None):
+    def train_model(self, model, Nit, opt, pos1=None, pos2=None, frame=True):
         ## Initializing the training loop
         if pos1 is None and pos2 is None:
             if self.linked:
@@ -78,39 +78,55 @@ class Registration(Plot):
             else:
                 raise Exception('Dataset is not linked but no Neighbours have been generated yet')
            
+        ## Initialize batches
+        if frame: frame,_=tf.unique(self.ch1.frame) # work with batches of frames
+        else: frame=None                            # take whole dataset as single batch
+        
         ## The training loop
-        frame,_=tf.unique(self.ch1.frame)
         for i in range(Nit):
-            for fr in frame:
+            loss=self.train_step(model, Nit, opt, pos1, pos2, frame)   
+            
+        return loss
+    
+    
+    def train_step(self, model, Nit, opt, pos1, pos2, frame=None):
+    # the optimization step
+        ## take whole dataset as single batch
+        if frame is None: 
+            with tf.GradientTape() as tape:
+                loss=self.loss_fn(model,pos1,pos2) 
+                
+            grads = tape.gradient(loss, model.trainable_weights)
+            opt.apply_gradients(zip(grads, model.trainable_weights))
+        ## work with batches of frames
+        else:
+            for fr in frame: # work with batches 
                 idx1=tf.where(self.ch1.frame==fr)
                 idx2=tf.where(self.ch2.frame==fr)
                 pos1_fr=tf.gather(pos1,idx1[:,0],axis=0) 
                 pos2_fr=tf.gather(pos2,idx2[:,0],axis=0) 
                 
-                self.train_step(model, Nit, opt, pos1_fr, pos2_fr)          
-        return model
-    
-    
-    #@tf.function
-    def train_step(self, model, Nit, opt, pos1, pos2):
-        with tf.GradientTape() as tape:
-            pos2_mapped = model(pos1, pos2)
-            loss = self.loss_fn(pos1, pos2_mapped)
-                   
-        grads = tape.gradient(loss, model.trainable_weights)
-        opt.apply_gradients(zip(grads, model.trainable_weights))
+                with tf.GradientTape() as tape:
+                    loss=self.loss_fn(model,pos1_fr,pos2_fr) 
+                    
+                grads = tape.gradient(loss, model.trainable_weights)
+                opt.apply_gradients(zip(grads, model.trainable_weights))
         return loss
     
     
-    def loss_fn(self, ch1, ch2):
-        if self.linked:
-            loss = ( tf.reduce_sum(tf.square(ch1-ch2)) )
-        else: 
+    @tf.function(experimental_relax_shapes=True)
+    def loss_fn(self, model, pos1, pos2):
+    # The metric that will be optimized
+        pos2 = model(pos1, pos2)
+        if self.linked: # for linked dataset, this metric will be the square distance
+            loss = tf.reduce_sum(tf.square(pos1-pos2))
+        elif self.Neighbours:           # for non-linked datasets, this metric will be the Relative Entropy with a NN algorithm
             CRLB = .15
-            D_KL = 0.5*tf.reduce_sum( tf.square(ch1 - ch2) / CRLB**2 , axis=2)
-            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / ch2.shape[1] ) / ch2.shape[0] , axis = 1) ) ) 
+            D_KL = 0.5*tf.reduce_sum( tf.square(pos1 - pos2) / CRLB**2 , axis=2)
+            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / pos2.shape[1] ) / pos2.shape[0] , axis = 1) ) ) 
+        else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
         return loss
-            
+    
     
     #%% Global Transforms (Affine, Polynomial3, RigidBody)
     ## Shift
@@ -125,7 +141,7 @@ class Registration(Plot):
         
         # Training the Model
         print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
-        self.ShiftModel = self.train_model(self.ShiftModel, Nit, opt)
+        _ = self.train_model(self.ShiftModel, Nit, opt)
 
 
     def Transform_Shift(self):
@@ -150,14 +166,14 @@ class Registration(Plot):
         
         # Training the Model
         print('Training RigidBody Mapping (lr, #it) =',str((lr, Nit)),'...')
-        self.ShiftModel = self.train_model(self.RigidBodyModel, Nit, opt1)
+        _ = self.train_model(self.RigidBodyModel, Nit, opt1)
         
         ## then train the d vector (shift)
         self.RigidBodyModel.d._trainable=True
         self.RigidBodyModel.cos._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        self.ShiftModel = self.train_model(self.RigidBodyModel, Nit, opt2)
+        _ = self.train_model(self.RigidBodyModel, Nit, opt2)
 
     
     def Transform_RigidBody(self):
@@ -185,7 +201,7 @@ class Registration(Plot):
         # first train the A matrix (rot, shear, scaling)
         opt1=tf.optimizers.Adagrad(lr)
         ## Training the Model for A
-        self.AffineModel = self.train_model(self.AffineModel, Nit, opt1)
+        _ = self.train_model(self.AffineModel, Nit, opt1)
         
         
         ## then train the d vector (shift)
@@ -193,7 +209,7 @@ class Registration(Plot):
         self.AffineModel.A._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        self.AffineModel = self.train_model(self.AffineModel, Nit, opt2)
+        _ = self.train_model(self.AffineModel, Nit, opt2)
         
         
     
@@ -218,7 +234,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        self.Polynomial3Model = self.train_model(self.Polynomial3Model, Nit, opt)
+        _ = self.train_model(self.Polynomial3Model, Nit, opt)
         
     
     def Transform_Polynomial3(self):
@@ -286,7 +302,7 @@ class Registration(Plot):
         
         ## Training the Model
         print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, Nit, gridsize)),'...')
-        self.SplinesModel = self.train_model(self.SplinesModel, Nit, opt, ch1_input, ch2_input)
+        _ = self.train_model(self.SplinesModel, Nit, opt, ch1_input, ch2_input)
         self.ControlPoints = self.SplinesModel.ControlPoints
                 
     

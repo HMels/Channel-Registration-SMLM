@@ -23,24 +23,12 @@ class Channel:
         img = tf.Variable([[ tf.reduce_min(pos[:,0]), tf.reduce_min(pos[:,1]) ],
                            [ tf.reduce_max(pos[:,0]),  tf.reduce_max(pos[:,1]) ]], dtype=tf.float32)
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
-    
-    
-    def SplitFrames(self):
-        print('Splitting Dataset into different frames...')
-        if len(self.pos)>1: raise ValueError('Dataset already split in batches')
-        frames,_ = tf.unique(self.frame)
-        (pos,frame)=([],[])
-        for fr in frames:
-            idx = tf.where(self.frame==fr)
-            pos.append( tf.squeeze(tf.gather(self.pos,idx,axis=0), axis=1) )
-            frame.append( self.frame[idx] )
-        self.pos.assign( pos )
-        self.frame = frame
         
         
     def load_NN_matrix(self, idxlist):
     # Takes the indexes for channel 1 and 2 and loads the matrix
-        if len(self.pos)!=len(idxlist): raise ValueError('idxlist should be same size as the positions')
+        print(len(idxlist),self.pos.shape[0])
+        if self.pos.shape[0]!=len(idxlist): raise ValueError('idxlist should be same size as the positions')
         self.NNpos=[]
         for batch in range(len(self.pos)):
             NN=[]

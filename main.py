@@ -15,20 +15,20 @@ if False: #% Load Beads
     DS1 = dataset(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'], linked=True, pix_size=1)
     DS1.load_dataset_hdf5()
     DS1, DS2 = DS1.SplitDataset()
+    DS1.link_dataset(FrameLinking=False)
     gridsize=200
 
 
-if False: #% Load Clusters
+if True: #% Load Clusters
     DS1 = dataset([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
                         'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ], linked=False, pix_size=159)
     DS1.load_dataset_hdf5()
     #DS1.SubsetRandom(subset=0.2)
-    DS1, DS2 = DS1.SplitDataset()
-    DS1.link_dataset(FrameLinking=False)
+    #DS1, DS2 = DS1.SplitDataset()
     gridsize=1000
     
 
-if True: #% Load Excel
+if False: #% Load Excel
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv', linked=False, pix_size=1)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv', linked=False, pix_size=1)
     DS1.load_dataset_excel()
@@ -46,11 +46,6 @@ if not DS1.linked:
     maxDistance=250
     k=8
     DS1.find_neighbours(maxDistance, k)
-    if DS1.NN_maxDist is not None:
-        DS2.find_BrightNN(maxDistance, k)
-    elif DS1.NN_k is not None:
-        DS2.find_kNN(k)
-    else: raise Exception('No neighbours generated for DS1')
 
 
 #%% Shift Transform
@@ -88,12 +83,8 @@ if not DS1.developer_mode:
     DS2.link_dataset(FrameLinking=True)
     DS2.Filter_Pairs(pair_filter[1])
     
-    ## Add all batches together for data processing
-    #DS1.concat_batches()
-    #DS2.concat_batches()
-    
     ## DS1
-    DS1.ErrorPlot(nbins=nbins)
+    #DS1.ErrorPlot(nbins=nbins)
     DS1.ErrorDistribution_xy(nbins=nbins, xlim=xlim)
     
     ## DS2
@@ -105,7 +96,7 @@ if not DS1.developer_mode:
     
     #%% image
     ## Image overview
-    if False:
+    if True:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
-        DS1.plot_1channel()
+        #DS1.plot_1channel()
