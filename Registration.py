@@ -68,8 +68,8 @@ class Registration(Plot):
         
         
     #%% Optimization functions
-    def train_model(self, model, Nit, opt, pos1=None, pos2=None, frame=False):
-        ## Initializing the training loop
+    def train_model(self, model, epochs, opt, pos1=None, pos2=None):
+        ## initializing the training loop
         if pos1 is None and pos2 is None:
             if self.linked:
                     pos1, pos2 = self.ch1.pos, self.ch2.pos
@@ -78,21 +78,21 @@ class Registration(Plot):
             else:
                 raise Exception('Dataset is not linked but no Neighbours have been generated yet')
            
-        ## Initialize batches
-        if frame: frame,_=tf.unique(self.ch1.frame) # work with batches of frames
-        else: frame=None                            # take whole dataset as single batch
+        ## initializing batches
+        if self.FrameOptimization: frame,_=tf.unique(self.ch1.frame) # work with batches of frames
+        else: frame=None                                             # take whole dataset as single batch
         
         ## The training loop
-        for i in range(Nit):
-            loss=self.train_step(model, Nit, opt, pos1, pos2, frame)   
+        for i in range(epochs):
+            loss=self.train_step(model, epochs, opt, pos1, pos2, frame)   
             
         return loss
     
     
-    def train_step(self, model, Nit, opt, pos1, pos2, frame=None):
+    def train_step(self, model, epochs, opt, pos1, pos2, frame=None):
     # the optimization step
         ## take whole dataset as single batch
-        if frame is None: 
+        if not self.FrameOptimization: 
             with tf.GradientTape() as tape:
                 loss=self.loss_fn(model,pos1,pos2) 
                 
@@ -104,7 +104,6 @@ class Registration(Plot):
                 idx1=tf.where(self.ch1.frame==fr)
                 idx2=tf.where(self.ch2.frame==fr)
             
-                print(pos1.shape, idx1)
                 pos1_fr=tf.gather_nd(pos1,idx1)
                 pos2_fr=tf.gather_nd(pos2,idx2)
                 
@@ -133,7 +132,7 @@ class Registration(Plot):
     #%% Global Transforms (Affine, Polynomial3, RigidBody)
     ## Shift
     #@tf.function
-    def Train_Shift(self, lr=100, Nit=100):
+    def Train_Shift(self, lr=100, epochs=100):
     # Training the RigidBody Mapping
         if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
@@ -142,8 +141,8 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Shift Mapping (lr, #it) =',str((lr, Nit)),'...')
-        _ = self.train_model(self.ShiftModel, Nit, opt)
+        print('Training Shift Mapping (lr, #it) =',str((lr, epochs)),'...')
+        _ = self.train_model(self.ShiftModel, epochs, opt)
 
 
     def Transform_Shift(self):
@@ -157,7 +156,7 @@ class Registration(Plot):
     
     
     ## RigidBody
-    def Train_RigidBody(self, lr=1, Nit=200):
+    def Train_RigidBody(self, lr=1, epochs=200):
     # Training the RigidBody Mapping
         if self.RigidBodyModel is not None: raise Exception('Models can only be trained once')
         if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
@@ -167,15 +166,15 @@ class Registration(Plot):
         opt1=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training RigidBody Mapping (lr, #it) =',str((lr, Nit)),'...')
-        _ = self.train_model(self.RigidBodyModel, Nit, opt1)
+        print('Training RigidBody Mapping (lr, #it) =',str((lr, epochs)),'...')
+        _ = self.train_model(self.RigidBodyModel, epochs, opt1)
         
         ## then train the d vector (shift)
         self.RigidBodyModel.d._trainable=True
         self.RigidBodyModel.cos._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        _ = self.train_model(self.RigidBodyModel, Nit, opt2)
+        _ = self.train_model(self.RigidBodyModel, epochs, opt2)
 
     
     def Transform_RigidBody(self):
@@ -190,7 +189,7 @@ class Registration(Plot):
         
         
     ## Affine
-    def Train_Affine(self, lr=1, Nit=200):
+    def Train_Affine(self, lr=1, epochs=200):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
         if tf.math.count_nonzero(self.mid)!=0: print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
@@ -199,11 +198,11 @@ class Registration(Plot):
         self.AffineModel=AffineModel(direct=self.linked)
         
         # Training the Model
-        print('Training Affine Mapping with (lr, #it) =',str((lr, Nit)),'...')
+        print('Training Affine Mapping with (lr, #it) =',str((lr, epochs)),'...')
         # first train the A matrix (rot, shear, scaling)
         opt1=tf.optimizers.Adagrad(lr)
         ## Training the Model for A
-        _ = self.train_model(self.AffineModel, Nit, opt1)
+        _ = self.train_model(self.AffineModel, epochs, opt1)
         
         
         ## then train the d vector (shift)
@@ -211,7 +210,7 @@ class Registration(Plot):
         self.AffineModel.A._trainable=False
         opt2=tf.optimizers.Adagrad(lr)
         # Training the Model
-        _ = self.train_model(self.AffineModel, Nit, opt2)
+        _ = self.train_model(self.AffineModel, epochs, opt2)
         
         
     
@@ -227,7 +226,7 @@ class Registration(Plot):
       
         
     ## Polynomial3
-    def Train_Polynomial3(self, lr=1, Nit=200):
+    def Train_Polynomial3(self, lr=1, epochs=200):
     # Training the Polynomial3 Mapping
         if self.Polynomial3Model is not None: raise Exception('Models can only be trained once')
         
@@ -236,7 +235,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        _ = self.train_model(self.Polynomial3Model, Nit, opt)
+        _ = self.train_model(self.Polynomial3Model, epochs, opt)
         
     
     def Transform_Polynomial3(self):
@@ -250,8 +249,8 @@ class Registration(Plot):
         
         
     #%% CatmullRom Splines
-    def Train_Splines(self, lr=1, Nit=200, gridsize=1000, edge_grids=1):
-    # Training the Splines Mapping. lr is the learningrate, Nit the number of iterations
+    def Train_Splines(self, lr=1, epochs=200, gridsize=1000, edge_grids=1):
+    # Training the Splines Mapping. lr is the learningrate, epochs the number of iterations
     # gridsize the size of the Spline grids and edge_grids the number of gridpoints extra at the edge
         if self.SplinesModel is not None: raise Exception('Models can only be trained once')
         
@@ -298,13 +297,13 @@ class Registration(Plot):
                 self.ch1NN.pos / gridsize - self.x2_min + edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False)
             
-        ## initialize optimizer
+        ## initializing optimizer
         opt=tf.optimizers.Adagrad(lr)
         self.SplinesModel=CatmullRomSpline2D(self.ControlPoints, direct=self.linked)
         
         ## Training the Model
-        print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, Nit, gridsize)),'...')
-        _ = self.train_model(self.SplinesModel, Nit, opt, ch1_input, ch2_input)
+        print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, epochs, gridsize)),'...')
+        _ = self.train_model(self.SplinesModel, epochs, opt, ch1_input, ch2_input)
         self.ControlPoints = self.SplinesModel.ControlPoints
                 
     

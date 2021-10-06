@@ -16,11 +16,13 @@ from Registration import Registration
 
 #%% Dataset
 class dataset(Registration):
-    def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512]):
-        self.path=path
-        self.pix_size=pix_size
-        self.imgshape=imgshape
-        self.linked=linked        
+    def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512], FrameLinking=True, FrameOptimization=False):
+        self.path=path                              # the string or list containing the strings of the file location of the dataset
+        self.pix_size=pix_size                      # the multiplicationfactor to change the dataset into units of nm
+        self.imgshape=imgshape                      # number of pixels of the dataset
+        self.linked=linked                          # is the data linked/paired?
+        self.FrameLinking=FrameLinking              # will the dataset be linked per frame? Also applicable for NN algorithms
+        self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
         Registration.__init__(self)
         
         
@@ -94,7 +96,7 @@ class dataset(Registration):
         
     #%% pair_functions
     #@tf.function
-    def link_dataset(self, FrameLinking=False):
+    def link_dataset(self):
     # links dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
         print('Linking datasets...')
@@ -106,7 +108,7 @@ class dataset(Registration):
         
         (locsB,frameB)=([],[])
         for i in range(ch1_pos.shape[0]):
-            if FrameLinking:
+            if self.FrameLinking:
                 sameframe_pos = ch2_pos[ch2_frame==ch1_frame[i],:]
                 dists = np.sqrt(np.sum((ch1_pos[i,:]-sameframe_pos)**2,1))
             
@@ -232,106 +234,91 @@ class dataset(Registration):
     
     
     #%% Generate Neighbours
-    def find_neighbours(self, maxDistance=50, k=20, FrameLinking=False):
+    def find_neighbours(self, maxDistance=50, k=20):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
-        ch1_frame=self.ch1.frame
-        ch2_frame=self.ch2.frame
-        ch1_pos=self.ch1.pos
-        ch2_pos=self.ch2.pos
+        self.NN_maxDist=maxDistance
+        self.NN_k=k
         
-        
-        if FrameLinking: ## Neighbours per frame
+        if self.FrameLinking: ## Neighbours per frame
             frame,_=tf.unique(self.ch1.frame)
             (pos1, frame1, pos2, frame2) = ([],[],[],[])
             for fr in frame:
-                framepos1 = ch1_pos.numpy()[ch1_frame.numpy()==fr,:]
-                framepos2 = ch2_pos.numpy()[ch2_frame.numpy()==fr,:]
+                # Generate neighbouring indices per frame
+                framepos1 = self.ch1.pos.numpy()[self.ch1.frame.numpy()==fr,:]
+                framepos2 = self.ch2.pos.numpy()[self.ch2.frame.numpy()==fr,:]
+                idx1, idx2 = self.find_BrightNN(framepos1, framepos2)
                 
-                try: ################# idx1_fr and idx2_fr do not refer to ch1 and ch2
-                    idx1, idx2 = self.find_BrightNN(framepos1, framepos2, maxDistance=maxDistance, threshold=k)
-                except Exception:
-                    idx1, idx2 = self.find_kNN(framepos1, framepos2, k)
-                    
-                p1, f1 = self.load_NN_matrix(idx1, ch1_pos, ch1_frame)
-                p2, f2 = self.load_NN_matrix(idx2, ch2_pos, ch2_frame)
+                # Fill in the positions and frames 
+                p1, f1 = self.load_NN_matrix(idx1, framepos1, self.ch1.frame)
+                p2, f2 = self.load_NN_matrix(idx2, framepos2, self.ch2.frame)
                 pos1.append(p1)
                 pos2.append(p2)
                 frame1.append(f1)
                 frame2.append(f2)
             
+            # add together to get one matrix 
             pos1=tf.concat(pos1, axis=0)
             pos2=tf.concat(pos2, axis=0)
             frame1=tf.concat(frame1, axis=0)
             frame2=tf.concat(frame2, axis=0)
             
-        else: ## taking the whole dataset as a single batch   
-            try:
-                idx1, idx2 = self.find_BrightNN(ch1_pos.numpy(), ch2_pos.numpy(), maxDistance=maxDistance, threshold=k)
-            except Exception:
-                #print('Not enough bright Neighbours found in current setting. Switching to kNN with k = ',k,'!')
-                idx1, idx2 = self.find_kNN(ch1_pos.numpy(), ch2_pos.numpy(), k)
-            
-            pos1, frame1 = self.load_NN_matrix(idx1, ch1_pos, ch1_frame)
-            pos2, frame2 = self.load_NN_matrix(idx2, ch2_pos, ch2_frame)
+        else: ## taking the whole dataset as a single batch
+            idx1, idx2 = self.find_BrightNN(self.ch1.pos.numpy(), self.ch2.pos.numpy())
+            pos1, frame1 = self.load_NN_matrix(idx1, self.ch1.pos, self.ch1.frame)
+            pos2, frame2 = self.load_NN_matrix(idx2, self.ch2.pos, self.ch2.frame)
         
+        # load matrix as Channel class
         self.ch1NN = Channel( pos1, frame1 )
         self.ch2NN = Channel( pos2, frame2 )
         self.Neighbours=True
+        print(self.NN_k,'Neighbours found within',self.NN_maxDist,'nm for ',self.ch1NN.pos.shape[0],'spots!')
         
+    
+    def find_BrightNN(self, pos1, pos2):
+    # generates the brightest neighbours
+    # outputs a list of indices for the neigbhours
+        NN_maxDist=self.NN_maxDist
+        while True:
+            with Context() as ctx: # loading all NN
+                counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, NN_maxDist)
+        
+            ## putting all NNidx in a list 
+            (idxlist, pos, i) = ([], 0,0)
+            for count in counts:
+                idxlist.append( np.stack([
+                    i * np.ones([count], dtype=int),
+                    indices[pos:pos+count] 
+                    ]) )
+                pos+=count
+                i+=1
+                
+            ## filtering the NNidx list to be square
+            (idx1list, idx2list) = ([], [])
+            for idx in idxlist:
+                if idx.size>0 and idx.shape[1] > self.NN_k: # filter for brightest spots above threshold
+                    # select random sample from brightest spost
+                    idx1list.append(idx[0, :self.NN_k]) 
+                    idx2list.append(idx[1, np.random.choice(idx.shape[1], self.NN_k)]) 
+        
+            ## look if neighbours actually have been found
+            if idx1list==[]: 
+                NN_maxDist+=100
+            else:
+                if NN_maxDist!=self.NN_maxDist: 
+                    print('No neighbours were generated with currents settings!')
+                    print('The maxDistance has been changed from',self.NN_maxDist,'to',NN_maxDist,'nm.')
+                    self.NN_maxDist=NN_maxDist
+                return idx1list, idx2list
+            
         
     def load_NN_matrix(self, idx, pos, frame):
+    # fill in the nearest neighbour matrix positions and frame
         (NN,fr)=([],[])
         for nn in idx:
             NN.append(tf.gather(pos,nn,axis=0))
             fr.append(tf.gather(frame,nn[0]))
         return tf.stack(NN, axis=0) , tf.stack(fr, axis=0)
-        
-        
-    def find_BrightNN(self, pos1, pos2, maxDistance = 50, threshold = 20):
-    # generates the brightest neighbours
-    # outputs a list of indices for the neigbhours
-        with Context() as ctx: # loading all NN
-            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDistance)
     
-        ## putting all NNidx in a list 
-        (idxlist, pos, i) = ([], 0,0)
-        for count in counts:
-            idxlist.append( np.stack([
-                i * np.ones([count], dtype=int),
-                indices[pos:pos+count] 
-                ]) )
-            pos+=count
-            i+=1
-            
-        ## filtering the NNidx list to be square
-        (idx1list, idx2list) = ([], [])
-        for idx in idxlist:
-            if idx.size>0 and idx.shape[1] > threshold: # filter for brightest spots above threshold
-                # select random sample from brightest spost
-                idx1list.append(idx[0, np.random.choice(idx.shape[1], threshold)]) 
-                idx2list.append(idx[1, np.random.choice(idx.shape[1], threshold)]) 
-    
-        ## look if neighbours actually have been found
-        if idx1list==[]: 
-            raise Exception('No neighbours were generated. Adjust the threshold or maxDistance!')
-        else:
-            self.NN_maxDist=maxDistance
-            self.NN_threshold=threshold
-        return idx1list, idx2list
-        
-        
-    def find_kNN(self, pos1, pos2, k):
-    # generates the k-nearest neighbours
-    # outputs a list of indices for the neigbhours
-        (idx1list, idx2list) = ([],[])
-        for i in range(pos1.shape[0]):
-            idx1list.append( (i * np.ones(k, dtype=int)) )
-        for loc in pos1:
-            distances = np.sum((loc - pos2)**2 , axis = 1)
-            idx2list.append( np.argsort( distances )[:k] )
-            
-        self.NN_k=k
-        return idx1list, idx2list
         
     
