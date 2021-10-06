@@ -16,12 +16,13 @@ from Registration import Registration
 
 #%% Dataset
 class dataset(Registration):
-    def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512], FrameLinking=True, FrameOptimization=False):
-        self.path=path                              # the string or list containing the strings of the file location of the dataset
-        self.pix_size=pix_size                      # the multiplicationfactor to change the dataset into units of nm
-        self.imgshape=imgshape                      # number of pixels of the dataset
-        self.linked=linked                          # is the data linked/paired?
-        self.FrameLinking=FrameLinking              # will the dataset be linked per frame? Also applicable for NN algorithms
+    def __init__(self, path, pix_size=1, linked=False, imgshape=[512, 512], 
+                 FrameLinking=True, FrameOptimization=False):
+        self.path=path            # the string or list containing the strings of the file location of the dataset
+        self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
+        self.imgshape=imgshape    # number of pixels of the dataset
+        self.linked=linked        # is the data linked/paired?
+        self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
         Registration.__init__(self)
         
@@ -41,12 +42,12 @@ class dataset(Registration):
         self.ch1 = Channel(pos = data1[:,:2]* self.pix_size, frame = data1[:,2])
         self.ch2 = Channel(pos = data2[:,:2]* self.pix_size, frame = data2[:,2])
         
-        self.ch2_original=copy.deepcopy(self.ch2)
-        self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
+        self.ch20=copy.deepcopy(self.ch2)          # original channel 2
+        self.img, self.imgsize, self.mid = self.imgparams()      # loading the image parameters
         self.center_image()
     
     
-    def load_dataset_hdf5(self):
+    def load_dataset_hdf5(self, alignment=True):
         ## Loading dataset
         if len(self.path)==1 or isinstance(self.path,str):
             # Dataset is grouped, meaning it has to be split manually
@@ -61,11 +62,20 @@ class dataset(Registration):
             ch2 = Dataset.load(self.path[1])
         else:
             raise TypeError('Path invalid')
+            
+        if alignment:
+            print('Alignning both datasets')
+            shift = Dataset.align(ch1, ch2)
+            print('RCC shift equals', shift)
+            if not np.isnan(shift).any():
+                ch1.pos+= shift
+            else: 
+                print('Warning: Shift contains infinities')
         
         self.ch1 = Channel(pos = ch1.pos* self.pix_size, frame = ch1.frame)
         self.ch2 = Channel(pos = ch2.pos* self.pix_size, frame = ch2.frame)
         
-        self.ch2_original=copy.deepcopy(self.ch2)
+        self.ch20=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
         
@@ -79,28 +89,27 @@ class dataset(Registration):
         img2, _, _ = self.ch2.imgparams()
         
         img = tf.Variable([[ tf.reduce_min([img1[0,0], img2[0,0]]), tf.reduce_min([img1[0,1], img2[0,1]]) ],
-                           [ tf.reduce_max([img1[1,0], img2[1,0]]),  tf.reduce_max([img1[1,1], img2[1,1]]) ]], dtype=tf.float32)
+                           [ tf.reduce_max([img1[1,0], img2[1,0]]),  tf.reduce_max([img1[1,1], img2[1,1]]) ]], 
+                          dtype=tf.float32)
 
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
     
     
     def center_image(self):
         self.img, self.imgsize, self.mid = self.imgparams() 
-        #for batch in range(len(self.ch1.pos)):
         self.ch1.pos.assign(self.ch1.pos - self.mid[None,:])
         self.ch2.pos.assign(self.ch2.pos - self.mid[None,:])
-        self.ch2_original.pos.assign(self.ch2_original.pos - self.mid[None,:])
+        self.ch20.pos.assign(self.ch20.pos - self.mid[None,:])
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.mid = tf.Variable([0,0], dtype=tf.float32)
         
         
     #%% pair_functions
     #@tf.function
-    def link_dataset(self):
+    def link_dataset(self): ##############################################DEFINITELY NEEDS TO BE OPTIMIZED
     # links dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
         print('Linking datasets...')
-        #if len(self.ch1.pos)>1: raise Exception('Cannot link after splitting!')
         ch1_frame=self.ch1.frame.numpy()
         ch2_frame=self.ch2.frame.numpy()
         ch1_pos=self.ch1.pos.numpy()
@@ -139,15 +148,15 @@ class dataset(Registration):
         
         ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
         ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
-        ch2_original_pos = self.ch2_original.pos.numpy()[idx[:,0],:]
+        ch20_pos = self.ch20.pos.numpy()[idx[:,0],:]
         ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
         ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
-        ch2_original_frame = self.ch2_original.frame.numpy()[idx[:,0]]
+        ch20_frame = self.ch20.frame.numpy()[idx[:,0]]
         
-        del self.ch1, self.ch2, self.ch2_original
+        del self.ch1, self.ch2, self.ch20
         self.ch1 = Channel(ch1_pos, ch1_frame)
         self.ch2 = Channel(ch2_pos, ch2_frame)
-        self.ch2_original = Channel(ch2_original_pos, ch2_original_frame)
+        self.ch20 = Channel(ch20_pos, ch20_frame)
         
         
         
@@ -155,23 +164,21 @@ class dataset(Registration):
     def SubsetWindow(self, subset):
     # loading subset of dataset by creating a window of size subset 
         print('Taking a subset of size',subset,'...')
-        #if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
         
         self.img, self.imgsize, self.mid = self.imgparams()
         l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
         r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
     
-        mask1 = np.where( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
-                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]) , True, False)
-        mask2 = np.where( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
-                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]), True, False )
+        idx1 = np.argwhere( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
+                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]))
+        idx2 = np.argwhere( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
+                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]))
 
-        self = self.gather(mask1, mask2)
+        return self.gather(idx1, idx2)
         
         
     def SubsetRandom(self, subset):
     # loading subset of dataset by taking a random subset
-        #if len(self.ch1.pos)>1: raise ValueError('SubsetRandom should be used before creating batches!')
         if self.linked:
             mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=mask1
@@ -179,12 +186,11 @@ class dataset(Registration):
             mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=np.random.choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
             
-        self = self.gather(mask1, mask2)
+        return self.gather(np.argwhere(mask1), np.argwhere(mask2))
         
         
     def SplitDataset(self):
-    # Splits dataset into 2 halves for cross validation
-        #if len(self.ch1.pos)>1: raise ValueError('SplitDataset should be used before creating batches!')
+    # Splits dataset into 2 halves for cross validation)
         if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
         
         N1=self.ch1.pos.shape[0]
@@ -194,42 +200,33 @@ class dataset(Registration):
             mask1=np.ones(N1, dtype=bool)
             mask1[int(N1/2):]=False
             np.random.shuffle(mask1)  # create random mask to split dataset in two
-            mask2 = np.abs(mask1-1).astype('bool')
-
-            other1=self.gather(mask1, mask1)
-            other2=self.gather(mask2, mask2)
+            
+            idx1=np.argwhere(mask1)
+            idx2=np.argwhere( (mask1-1).astype(bool))
+            other1=self.gather(idx1, idx1)
+            other2=self.gather(idx2, idx2)
             
         else:
-            mask11=np.ones(N1, dtype=bool)
-            mask11[int(N1/2):]=False
-            mask12=np.ones(N2, dtype=bool)
-            mask12[int(N2/2):]=False
-            np.random.shuffle(mask11)  # create random mask to split dataset in two
-            np.random.shuffle(mask12)
-            mask21 = np.abs(mask11-1).astype('bool')
-            mask22 = np.abs(mask12-1).astype('bool')
+            mask1=np.ones(N1, dtype=bool)
+            mask1[int(N1/2):]=False
+            mask2=np.ones(N2, dtype=bool)
+            mask2[int(N2/2):]=False
+            np.random.shuffle(mask1)  # create random mask to split dataset in two
+            np.random.shuffle(mask2)
             
-            other1=self.gather(mask11, mask12)
-            other2=self.gather(mask21, mask22)
+            other1=self.gather(np.argwhere(mask1), np.argwhere(mask2) )
+            other2=self.gather(np.argwhere((mask1-1).astype('bool')), np.argwhere((mask2-1).astype('bool')))
         
         return other1, other2
-    
-    
-    def SplitFrames(self):
-    # splits frames of both ch1 and ch2
-        self.ch1.SplitFrames()
-        self.ch2.SplitFrames()
-        self.ch2_original.SplitFrames()
         
     
     def gather(self, idx1, idx2):
     # gathers the indexes of both Channels
         other = copy.deepcopy(self)
-        
-        del other.ch1, other.ch2, other.ch2_original
-        other.ch1 = Channel(pos=tf.gather(self.ch1.pos,idx1,axis=0), frame=self.ch1.frame[idx1])
-        other.ch2 = Channel(pos=tf.gather(self.ch2.pos,idx2,axis=0), frame=self.ch2.frame[idx2])
-        other.ch2_original = Channel(pos=tf.gather(self.ch2_original.pos,idx2,axis=0), frame=self.ch2.frame[idx2])
+        del other.ch1, other.ch2, other.ch20
+        other.ch1 = Channel(pos=tf.gather_nd(self.ch1.pos,idx1), frame=tf.gather_nd(self.ch1.frame,idx1))
+        other.ch2 = Channel(pos=tf.gather_nd(self.ch2.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2))
+        other.ch20 = Channel(pos=tf.gather_nd(self.ch20.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2))
         return other
     
     
@@ -237,40 +234,47 @@ class dataset(Registration):
     def find_neighbours(self, maxDistance=50, k=20):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
+        maxDistance=np.float32(maxDistance)
         self.NN_maxDist=maxDistance
         self.NN_k=k
         
         if self.FrameLinking: ## Neighbours per frame
             frame,_=tf.unique(self.ch1.frame)
-            (pos1, frame1, pos2, frame2) = ([],[],[],[])
+            (pos1, frame1, pos2) = ([],[],[])
             for fr in frame:
                 # Generate neighbouring indices per frame
                 framepos1 = self.ch1.pos.numpy()[self.ch1.frame.numpy()==fr,:]
                 framepos2 = self.ch2.pos.numpy()[self.ch2.frame.numpy()==fr,:]
+                
+                # make sure the arrays are equal in size by taking equal random sample
+                nmax=np.min((framepos1.shape[0], framepos2.shape[0]))
+                framepos1 = framepos1[np.random.choice(framepos1.shape[0], nmax),:]
+                framepos2 = framepos2[np.random.choice(framepos2.shape[0], nmax),:]
                 idx1, idx2 = self.find_BrightNN(framepos1, framepos2)
                 
                 # Fill in the positions and frames 
-                p1, f1 = self.load_NN_matrix(idx1, framepos1, self.ch1.frame)
-                p2, f2 = self.load_NN_matrix(idx2, framepos2, self.ch2.frame)
+                p1, _ = self.load_NN_matrix(idx1, framepos1, self.ch1.frame)
+                p2, _ = self.load_NN_matrix(idx2, framepos2, self.ch2.frame)
                 pos1.append(p1)
                 pos2.append(p2)
-                frame1.append(f1)
-                frame2.append(f2)
+                frame1.append(fr*np.ones(p1.shape[0]))
+                #frame1.append(f1)
+                #frame2.append(f2)
             
             # add together to get one matrix 
             pos1=tf.concat(pos1, axis=0)
             pos2=tf.concat(pos2, axis=0)
             frame1=tf.concat(frame1, axis=0)
-            frame2=tf.concat(frame2, axis=0)
+            #frame2=tf.concat(frame2, axis=0)
             
         else: ## taking the whole dataset as a single batch
             idx1, idx2 = self.find_BrightNN(self.ch1.pos.numpy(), self.ch2.pos.numpy())
             pos1, frame1 = self.load_NN_matrix(idx1, self.ch1.pos, self.ch1.frame)
-            pos2, frame2 = self.load_NN_matrix(idx2, self.ch2.pos, self.ch2.frame)
+            pos2, _ = self.load_NN_matrix(idx2, self.ch2.pos, self.ch2.frame)
         
         # load matrix as Channel class
         self.ch1NN = Channel( pos1, frame1 )
-        self.ch2NN = Channel( pos2, frame2 )
+        self.ch2NN = Channel( pos2, frame1 )
         self.Neighbours=True
         print(self.NN_k,'Neighbours found within',self.NN_maxDist,'nm for ',self.ch1NN.pos.shape[0],'spots!')
         
@@ -280,19 +284,7 @@ class dataset(Registration):
     # outputs a list of indices for the neigbhours
         NN_maxDist=self.NN_maxDist
         while True:
-            with Context() as ctx: # loading all NN
-                counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, NN_maxDist)
-        
-            ## putting all NNidx in a list 
-            (idxlist, pos, i) = ([], 0,0)
-            for count in counts:
-                idxlist.append( np.stack([
-                    i * np.ones([count], dtype=int),
-                    indices[pos:pos+count] 
-                    ]) )
-                pos+=count
-                i+=1
-                
+            idxlist = self.FindNeighbours_idx(pos1, pos2, NN_maxDist)
             ## filtering the NNidx list to be square
             (idx1list, idx2list) = ([], [])
             for idx in idxlist:
@@ -300,7 +292,7 @@ class dataset(Registration):
                     # select random sample from brightest spost
                     idx1list.append(idx[0, :self.NN_k]) 
                     idx2list.append(idx[1, np.random.choice(idx.shape[1], self.NN_k)]) 
-        
+                    
             ## look if neighbours actually have been found
             if idx1list==[]: 
                 NN_maxDist+=100
@@ -310,6 +302,23 @@ class dataset(Registration):
                     print('The maxDistance has been changed from',self.NN_maxDist,'to',NN_maxDist,'nm.')
                     self.NN_maxDist=NN_maxDist
                 return idx1list, idx2list
+            
+            
+    def FindNeighbours_idx(self, pos1, pos2, maxDist):
+    # prints a list containing the neighbouring indices of two channels
+        with Context() as ctx: # loading all NN
+            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDist)
+    
+        ## putting all NNidx in a list 
+        (idxlist, pos, i) = ([], 0,0)
+        for count in counts:
+            idxlist.append( np.stack([
+                i * np.ones([count], dtype=int),
+                indices[pos:pos+count] 
+                ]) )
+            pos+=count
+            i+=1
+        return idxlist
             
         
     def load_NN_matrix(self, idx, pos, frame):

@@ -11,6 +11,7 @@ class Channel:
     def __init__(self, pos=None, frame=None):
         self.pos = tf.Variable(pos, dtype=tf.float32, trainable=False) if pos is not None else {}
         self.frame = tf.Variable(frame, dtype=tf.float32, trainable=False) if frame is not None else {}
+        if self.pos.shape[0]!=self.frame.shape[0]: raise ValueError('Frame and Positions are not equal in size!')
         self.img, self.imgsize, self.mid = self.imgparams()
         
         

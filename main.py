@@ -22,29 +22,30 @@ if False: #% Load Beads
     gridsize=200
 
 
-if False: #% Load Clusters
+if True: #% Load Clusters
     DS1 = dataset([ 'C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5' , 
                         'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5' ],
                   linked=False, pix_size=159, FrameLinking=True, FrameOptimization=True)
     DS1.load_dataset_hdf5()
-    #DS1.SubsetRandom(subset=0.2)
-    #DS1, DS2 = DS1.SplitDataset()
+    DS1 = DS1.SubsetRandom(subset=0.2)
+    DS1, DS2 = DS1.SplitDataset()
     gridsize=1000
     
 
-if True: #% Load Excel
+if False: #% Load Excel
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
-                  linked=False, pix_size=1, FrameLinking=True, FrameOptimization=True)
+                  linked=False, pix_size=1, FrameLinking=True, FrameOptimization=False)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                   linked=False, pix_size=1, FrameLinking=True)
     DS1.load_dataset_excel()
     DS2.load_dataset_excel()
-    #DS1.link_dataset()
+    DS1.link_dataset()
     gridsize=3000
 
 
 #%% Params
 pair_filter = [250, 30]
+learning_rate = 1
 if DS1.FrameOptimization: epochs = 1
 else: epochs = 100
 
@@ -53,16 +54,16 @@ if not DS1.linked: # generate Neighbours
 
 
 #%% Shift Transform
-DS1.Train_Shift(lr=100, epochs=epochs)
+DS1.Train_Shift(lr=100*learning_rate, epochs=epochs)
 DS1.Transform_Shift()
 
 #%% Affine Transform
 DS1.Filter_Pairs(pair_filter[0])
-DS1.Train_Affine(lr=10, epochs=epochs*2)
+DS1.Train_Affine(lr=10*learning_rate, epochs=epochs*2)
 DS1.Transform_Affine()
 
 #%% CatmullRomSplines
-DS1.Train_Splines(lr=1e-2, epochs=epochs*2, gridsize=gridsize, edge_grids=1)
+DS1.Train_Splines(lr=1e-2*learning_rate, epochs=epochs*2, gridsize=gridsize, edge_grids=1)
 DS1.Transform_Splines()
 #DS1.plot_SplineGrid()
 DS1.Filter_Pairs(pair_filter[1])
@@ -100,7 +101,7 @@ if not DS1.developer_mode:
     
     #%% image
     ## Image overview
-    if False:
+    if True:
         DS1.generate_channel(precision=100)
         DS1.plot_channel()
         #DS1.plot_1channel()

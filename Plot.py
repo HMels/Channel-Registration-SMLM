@@ -29,23 +29,23 @@ class Plot:
         ## Coupling Datasets if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         pos1_original=self.ch1.pos_all()
-        pos2_original=self.ch2_original.pos_all()
+        pos2_original=self.ch20.pos_all()
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
         
         # Calculating the error
         dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
-        if self.ch2_original.pos_all() is not None: 
+        if self.ch20.pos_all() is not None: 
             dist2, avg2, r2 = self.ErrorDist(pos1_original, pos2_original)
         
         
         ## Plotting
-        if self.ch2_original.pos_all() is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
+        if self.ch20.pos_all() is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
         else: fig, (ax1, ax2) = plt.subplots(2)
           
         # plotting the histogram
         n1 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        if self.ch2_original.pos_all() is not None:
+        if self.ch20.pos_all() is not None:
             n1 = ax3.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
             n2 = ax3.hist(dist2, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
         else:
@@ -54,7 +54,7 @@ class Plot:
             
         # plotting the FOV
         ax2.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
-        if self.ch2_original.pos_all() is not None:
+        if self.ch20.pos_all() is not None:
             ax4.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
             ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
@@ -63,13 +63,13 @@ class Plot:
         
         # Plotting the averages as vlines
         ax1.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
-        if self.ch2_original.pos_all() is not None:
+        if self.ch20.pos_all() is not None:
             ax3.vlines(avg2, color='purple', ymin=0, ymax=ymax, label=('avg original = '+str(round(avg2,2))))
             ax3.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
           
         # Plotting the averages as hlines
         ax2.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
-        if self.ch2_original.pos_all() is not None:
+        if self.ch20.pos_all() is not None:
             ax4.hlines(avg2, color='purple', xmin=0, xmax=xmax, label=('average original = '+str(round(avg2,2))))
             ax4.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
         
@@ -89,7 +89,7 @@ class Plot:
         ax2.set_ylabel('Absolute Error')
         ax2.legend()
         
-        if self.ch2_original.pos_all() is not None:
+        if self.ch20.pos_all() is not None:
             ax3.set_title('Comparisson')
             ax3.set_ylim([0,ymax])
             ax3.set_xlim(0)
@@ -106,7 +106,7 @@ class Plot:
           
         fig.tight_layout()
         fig.show()
-        if self.ch2_original.pos_all() is not None: 
+        if self.ch20.pos_all() is not None: 
             print('The original model had an average absolute error of',avg2,'nm\nThe mapped model has an average absolute error of',avg1,'nm')
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
@@ -247,12 +247,12 @@ class Plot:
     
     def generate_channel(self, precision=10):
     # Generates the channels as matrix
-        print('Generating Channels as matrix')       
+        print('Generating Channels as matrix...')       
     
         # normalizing system
         locs1 = self.ch1.pos_all()  / precision
         locs2 = self.ch2.pos_all()  / precision
-        if self.ch2_original.pos_all() is not None: locs2_original = self.ch2_original.pos_all()  / precision
+        if self.ch20.pos_all() is not None: locs2_original = self.ch20.pos_all()  / precision
         else: locs2_original=locs2
         
         # calculate bounds of the system
@@ -269,7 +269,7 @@ class Plot:
         # generating the matrices to be plotted
         self.channel1 = self.generate_matrix(locs1)
         self.channel2 = self.generate_matrix(locs2)
-        if self.ch2_original.pos_all() is not None: self.channel2_original = self.generate_matrix(locs2_original)
+        if self.ch20.pos_all() is not None: self.channel2_original = self.generate_matrix(locs2_original)
         
         
     def generate_matrix(self, locs):
@@ -286,39 +286,49 @@ class Plot:
     #%% Plotting Channels
     def plot_channel(self):
         print('Plotting...')
-        
+        rotate=self.channel1.shape[1]>self.channel1.shape[0]
+        if rotate:
+            self.channel1=np.rot90(self.channel1)
+            self.channel2=np.rot90(self.channel2)
+            self.channel2_original=np.rot90(self.channel2_original)
+            self.axis=np.concatenate((self.axis[2:],self.axis[:2]))
+            label=['x1','x2']
+        else:
+            label=['x2', 'x1']
+            
         # plotting all channels
         plt.figure()
-        if self.ch2_original.pos_all() is not None: plt.subplot(131)
+        if self.ch20.pos_all() is not None: plt.subplot(131)
         else: plt.subplot(121)
         plt.imshow(self.channel1, extent = self.axis)
-        plt.xlabel('x2')
-        plt.ylabel('x1')
+        plt.xlabel(label[0])
+        plt.ylabel(label[1])
         plt.title('original channel 1')
         plt.tight_layout()
         
-        if self.ch2_original.pos_all() is not None: plt.subplot(132)
+        if self.ch20.pos_all() is not None: plt.subplot(132)
         else: plt.subplot(122)
         plt.imshow(self.channel2, extent = self.axis)
-        plt.xlabel('x2')
-        plt.ylabel('x1')
+        plt.xlabel(label[0])
+        plt.ylabel(label[1])
         plt.title('mapped channel 2')
         plt.tight_layout()
         
-        if self.ch2_original.pos_all() is not None: 
+        if self.ch20.pos_all() is not None: 
             plt.subplot(133)
             plt.imshow(self.channel2_original, extent = self.axis)
-            plt.xlabel('x2')
-            plt.ylabel('x1')
+            plt.xlabel(label[0])
+            plt.ylabel(label[1])
             plt.title('original channel 2')
             plt.tight_layout()
         
         
     def plot_1channel(self, channel1=None):
         if channel1 is None: channel1=self.channel1
+        if channel1.shape[1]>channel1.shape[0]: channel1=np.rot90(channel1)
         # plotting all channels
         plt.figure()
-        plt.imshow(np.rot90(channel1))
+        plt.imshow(channel1)
         plt.xlabel('x1')
         plt.ylabel('x2')
         plt.title('Single Channel view')
