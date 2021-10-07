@@ -21,8 +21,13 @@ class Channel:
     
     def imgparams(self):
         pos = self.pos_all()
+        if len(pos.shape)==3: pos=pos[:,0,:]
+        elif len(pos.shape)!=2: raise ValueError('Invalid input shape! ch1 has shape '+str(pos.shape) )
+        
         img = tf.Variable([[ tf.reduce_min(pos[:,0]), tf.reduce_min(pos[:,1]) ],
                            [ tf.reduce_max(pos[:,0]),  tf.reduce_max(pos[:,1]) ]], dtype=tf.float32)
         return img, (img[1,:] - img[0,:]), (img[1,:] + img[0,:])/2
         
-       
+      
+    def center(self):
+        self.pos.assign(self.pos - tf.reduce_mean(self.pos,axis=0))

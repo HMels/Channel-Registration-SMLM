@@ -40,70 +40,62 @@ class CatmullRomSpline2D(_CatmullRomSplineBase):
         
         assert(len(ControlPoints.shape)==3)
         self.ControlPoints = tf.Variable(ControlPoints, trainable=True, dtype=tf.float32)
-        self.direct = direct
         
         
     @tf.function 
-    def call(self, ch1, ch2):
-        if self.direct:
-            return self.transform_vec(ch2)
-        else:
-            return self.transform_mat(ch2)
-        
-
-    @tf.function
-    def transform_vec(self, pts):
-        x = pts[:,0]
-        y = pts[:,1]
-
-        ix = tf.cast(x, tf.int32)
-        sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
-
-        iy = tf.cast(y, tf.int32)
-        sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
-
-        iy = tf.clip_by_value(((iy-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[0]-1)
-        ix = tf.clip_by_value(((ix-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[1]-1)
-
-        # compute sx^a * A
-        cx = (sx[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
-        cy = (sy[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
-        
-        ix = ix[:,None,:] * tf.ones(4,dtype=tf.int32)[None,:,None]
-        iy = iy[:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,:]
-        #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
-        #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
-        idx = tf.stack([iy,ix],-1)
-        sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
-        
-        # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
-        return tf.reduce_sum((sel_ControlPoints * cy[:,:,None,None] * cx[:,None,:,None]), axis=(1,2))
+    def call(self, pts):
+        if len(pts.shape)==2: # transform vectors
+            x = pts[:,0]
+            y = pts[:,1]
     
+            ix = tf.cast(x, tf.int32)
+            sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
     
-    @tf.function
-    def transform_mat(self, pts):
-        x = pts[:,:,0]
-        y = pts[:,:,1]
-
-        ix = tf.cast(x, tf.int32)
-        sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
-
-        iy = tf.cast(y, tf.int32)
-        sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
-
-        iy = tf.clip_by_value(((iy-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[0]-1)
-        ix = tf.clip_by_value(((ix-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[1]-1)
-
-        # compute sx^a * A
-        cx = (sx[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
-        cy = (sy[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
+            iy = tf.cast(y, tf.int32)
+            sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
+    
+            iy = tf.clip_by_value(((iy-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[0]-1)
+            ix = tf.clip_by_value(((ix-1)[:,None] + tf.range(4)[None,:]), 0, self.ControlPoints.shape[1]-1)
+    
+            # compute sx^a * A
+            cx = (sx[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
+            cy = (sy[:,None]**(tf.range(4,dtype=tf.float32)[None])) @ self.spline_basis
+            
+            ix = ix[:,None,:] * tf.ones(4,dtype=tf.int32)[None,:,None]
+            iy = iy[:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,:]
+            #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
+            #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
+            idx = tf.stack([iy,ix],-1)
+            sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
+            
+            # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
+            return tf.reduce_sum((sel_ControlPoints * cy[:,:,None,None] * cx[:,None,:,None]), axis=(1,2))
         
-        ix = ix[:,:,None,:] * tf.ones(4,dtype=tf.int32)[None,None,:,None]
-        iy = iy[:,:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,None,:]
-        #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
-        #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
-        idx = tf.stack([iy,ix],-1)
-        sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
+        elif len(pts.shape)==3: # transform matrices
+            x = pts[:,:,0]
+            y = pts[:,:,1]
+    
+            ix = tf.cast(x, tf.int32)
+            sx = tf.clip_by_value(x-tf.floor(x), 0, 1)
+    
+            iy = tf.cast(y, tf.int32)
+            sy = tf.clip_by_value(y-tf.floor(y), 0, 1)
+    
+            iy = tf.clip_by_value(((iy-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[0]-1)
+            ix = tf.clip_by_value(((ix-1)[:,:,None] + tf.range(4)[None,None,:]), 0, self.ControlPoints.shape[1]-1)
+    
+            # compute sx^a * A
+            cx = (sx[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
+            cy = (sy[:,:,None]**(tf.range(4,dtype=tf.float32)[None,None,:])) @ self.spline_basis
+            
+            ix = ix[:,:,None,:] * tf.ones(4,dtype=tf.int32)[None,None,:,None]
+            iy = iy[:,:,:,None] * tf.ones(4,dtype=tf.int32)[None,None,None,:]
+            #ix = tf.repeat(ix[:,None,:], 4, axis=1) # repeat x over y axis
+            #iy = tf.repeat(iy[:,:,None], 4, axis=2) # repeat y over x axis
+            idx = tf.stack([iy,ix],-1)
+            sel_ControlPoints = tf.gather_nd(self.ControlPoints, idx)
+            
+            # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
+            return tf.reduce_sum((sel_ControlPoints * cy[:,:,:,None,None] * cx[:,:,None,:,None]), axis=(2,3))
         
-        # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
-        return tf.reduce_sum((sel_ControlPoints * cy[:,:,:,None,None] * cx[:,:,None,:,None]), axis=(2,3))
+        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

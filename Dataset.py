@@ -47,7 +47,7 @@ class dataset(Registration):
         self.center_image()
     
     
-    def load_dataset_hdf5(self, alignment=True):
+    def load_dataset_hdf5(self, align_rcc=True):
         ## Loading dataset
         if len(self.path)==1 or isinstance(self.path,str):
             # Dataset is grouped, meaning it has to be split manually
@@ -63,10 +63,10 @@ class dataset(Registration):
         else:
             raise TypeError('Path invalid')
             
-        if alignment:
+        if align_rcc:
             print('Alignning both datasets')
             shift = Dataset.align(ch1, ch2)
-            print('RCC shift equals', shift)
+            print('RCC shift equals', shift*self.pix_size)
             if not np.isnan(shift).any():
                 ch1.pos+= shift
             else: 
@@ -104,9 +104,14 @@ class dataset(Registration):
         self.mid = tf.Variable([0,0], dtype=tf.float32)
         
         
+    def center_channels(self):
+        self.ch1.center()
+        self.ch2.center()
+        self.ch20.center()
+        
+        
     #%% pair_functions
-    #@tf.function
-    def link_dataset(self): ##############################################DEFINITELY NEEDS TO BE OPTIMIZED
+    def link_dataset1(self): ##############################################DEFINITELY NEEDS TO BE OPTIMIZED
     # links dataset with a simple iterative nearest neighbour method
     # FrameLinking links the dataset per frame
         print('Linking datasets...')
@@ -130,10 +135,47 @@ class dataset(Registration):
                 locsB.append(ch2_pos[iB,:])
                 frameB.append(ch2_frame[iB])
             
-        if not locsB: raise ValueError('When Coupling Datasets, one of the Channels returns empty')
+        if not locsB: raise ValueError('When Linking Datasets, one of the Channels returns empty')
         
         del self.ch2
         self.ch2 = Channel(locsB, frameB)
+        self.linked = True
+        
+        
+    def link_dataset(self, maxDist=1000):
+        print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
+        ch1_frame=self.ch1.frame.numpy()
+        ch2_frame=self.ch2.frame.numpy()
+        ch1_pos=self.ch1.pos.numpy()
+        ch2_pos=self.ch2.pos.numpy()
+        
+        
+        ######### DO linking in total, or iterate over the frames!!!! NOT ITERATE POSITIONS
+        locsA, locsB, frameA, frameB=([],[],[],[])
+        for i in range(ch1_pos.shape[0]):
+            if self.FrameLinking:
+                sameframe_pos = ch2_pos[ch2_frame==ch1_frame[i],:]
+                idx = self.FindNeighbours_idx(ch1_pos[i,:][None],sameframe_pos,maxDist=maxDist)[0][1]
+                if idx.size!=0:
+                    j=np.argmin( np.sum( (ch1_pos[i,:]-sameframe_pos[idx,:])**2 , axis=1))
+                    locsA.append(ch1_pos[i,:])
+                    locsB.append(sameframe_pos[j,:])
+                    frameA.append(ch1_frame[i])
+                    frameB.append(ch1_frame[j])
+            else:
+                idx = self.FindNeighbours_idx(ch1_pos[i,:][None],ch2_pos,maxDist=maxDist)[0][1]
+                if idx.size!=0:
+                    j=np.argmin( np.sum( (ch1_pos[i,:]-ch2_pos[idx,:])**2 , axis=1))
+                    locsA.append(ch1_pos[i,:])
+                    locsB.append(ch2_pos[j,:])
+                    frameA.append(ch1_frame[i])
+                    frameB.append(ch2_frame[j])
+        
+        if len(locsB)==0 or len(locsA)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
+        
+        del self.ch1, self.ch2
+        self.ch1 = Channel( np.array(locsA) , np.array(frameA) )
+        self.ch2 = Channel( np.array(locsB) , np.array(frameB) )
         self.linked = True
         
         

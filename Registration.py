@@ -118,14 +118,18 @@ class Registration(Plot):
     #@tf.function(experimental_relax_shapes=True)
     def loss_fn(self, model, pos1, pos2):
     # The metric that will be optimized
-        pos2 = model(pos1, pos2)
+        pos2 = model(pos2)
         if self.linked: # for linked dataset, this metric will be the square distance
             loss = tf.reduce_sum(tf.square(pos1-pos2))
+        elif self.Neighbours:
+            loss = tf.reduce_sum(tf.square( tf.squeeze(pos1,axis=1) - tf.squeeze(pos2,axis=1)  ))        
+        '''
         elif self.Neighbours:       # for non-linked datasets, this metric will be the Relative Entropy with a NN algorithm
             CRLB = .15
             D_KL = 0.5*tf.reduce_sum( tf.square(pos1 - pos2) / CRLB**2 , axis=2)
             loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / pos2.shape[1] ) / pos2.shape[0], axis = 1) ) ) 
-        else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
+        '''
+        #else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
         return loss
     
     
@@ -137,7 +141,7 @@ class Registration(Plot):
         if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
-        self.ShiftModel=ShiftModel(direct=self.linked)
+        self.ShiftModel=ShiftModel()
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
@@ -150,7 +154,7 @@ class Registration(Plot):
         print('Transforming Shift Mapping...')
         if self.ShiftModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            self.ch2.pos.assign(self.ShiftModel.transform_vec((self.ch2.pos)))
+            self.ch2.pos.assign(self.ShiftModel(self.ch2.pos))
             if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
                 raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
     
@@ -163,7 +167,7 @@ class Registration(Plot):
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
-        self.RigidBodyModel=RigidBodyModel(direct=self.linked)
+        self.RigidBodyModel=RigidBodyModel()
         opt1=tf.optimizers.Adagrad(lr)
         
         # Training the Model
@@ -184,7 +188,7 @@ class Registration(Plot):
             if tf.math.count_nonzero(self.mid)!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming RigidBody Mapping...')
-            self.ch2.pos.assign(self.RigidBodyModel.transform_vec((self.ch2.pos)))
+            self.ch2.pos.assign(self.RigidBodyModel(self.ch2.pos))
             if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
                 raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
         
@@ -197,7 +201,7 @@ class Registration(Plot):
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
-        self.AffineModel=AffineModel(direct=self.linked)
+        self.AffineModel=AffineModel()
         
         # Training the Model
         print('Training Affine Mapping with (lr, #it) =',str((lr, epochs)),'...')
@@ -221,7 +225,7 @@ class Registration(Plot):
             if tf.math.count_nonzero(self.mid)!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming Affine Mapping...')
-            self.ch2.pos.assign(self.AffineModel.transform_vec((self.ch2.pos)))
+            self.ch2.pos.assign(self.AffineModel(self.ch2.pos))
             if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
                 raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
       
@@ -232,7 +236,7 @@ class Registration(Plot):
         if self.Polynomial3Model is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
-        self.Polynomial3Model=Polynomial3Model(direct=self.linked)
+        self.Polynomial3Model=Polynomial3Model()
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
@@ -245,7 +249,7 @@ class Registration(Plot):
         print('Transforming Polynomial3 Mapping...')
         if self.Polynomial3Model is None: print('Model not trained yet, will pass without transforming.')
         else:
-            self.ch2.pos.assign(self.Polynomial3Model.transform_vec((self.ch2.pos)))
+            self.ch2.pos.assign(self.Polynomial3Model(self.ch2.pos))
             if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
                 raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
         
@@ -278,28 +282,28 @@ class Registration(Plot):
         if self.linked:
             ## Create variables normalized by gridsize
             ch1_input = Channel( tf.Variable( tf.stack([
-                self.ch1.pos[:,0] / gridsize - self.x1_min + edge_grids,
-                self.ch1.pos[:,1] / gridsize - self.x2_min + edge_grids
+                self.ch1.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch1.pos[:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch1.frame )
             ch2_input = Channel( tf.Variable( tf.stack([
-                self.ch2.pos[:,0] / gridsize - self.x1_min + edge_grids,
-                self.ch2.pos[:,1] / gridsize - self.x2_min + edge_grids
+                self.ch2.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch2.pos[:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch2.frame )
         else:
             ## Create variables normalized by gridsize
             ch1_input = Channel( tf.Variable( tf.stack([
-                self.ch1NN.pos / gridsize - self.x1_min + edge_grids,
-                self.ch1NN.pos / gridsize - self.x2_min + edge_grids
+                self.ch1NN.pos[:,:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch1NN.pos[:,:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch1NN.frame )
             ch2_input = Channel( tf.Variable( tf.stack([
-                self.ch2NN.pos / gridsize - self.x1_min + edge_grids,
-                self.ch2NN.pos / gridsize - self.x2_min + edge_grids
+                self.ch2NN.pos[:,:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch2NN.pos[:,:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch2NN.frame )
             
             
         ## initializing optimizer
         opt=tf.optimizers.Adagrad(lr)
-        self.SplinesModel=CatmullRomSpline2D(self.ControlPoints, direct=self.linked)
+        self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
         
         ## Training the Model
         print('Training Splines Mapping (lr, #it, gridsize) =',str((lr, epochs, gridsize)),'...')
@@ -321,7 +325,7 @@ class Registration(Plot):
                 ], axis=-1), dtype=tf.float32, trainable=False) 
                 
             # transform the new ch2 model
-            pos1_mapped =  self.SplinesModel.transform_vec(pos1) 
+            pos1_mapped =  self.SplinesModel(pos1) 
             self.ch2.pos.assign(tf.stack([
                 (pos1_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
                 (pos1_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          

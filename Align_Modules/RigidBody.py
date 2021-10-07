@@ -25,39 +25,31 @@ class RigidBodyModel(tf.keras.Model):
     '''
     def __init__(self, direct=False, name='shift'):
         super().__init__(name=name)
-        self.direct=tf.Variable(direct, dtype=bool, trainable=False) # is the dataset coupled
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
         self.cos = tf.Variable(1, dtype=tf.float32, trainable=True, name='rotation',
                                constraint=lambda t: tf.clip_by_value(t, -1, 1))
         
 
     @tf.function 
-    def call(self, ch1, ch2):
-        if self.direct:
-            return self.transform_vec(ch2)
-        else:
-            return self.transform_mat(ch2)
-    
-    
-    @tf.function
-    def transform_mat(self, ch2):
-        ## Shift
-        ch2_mapped = ch2 + self.d[None,None] 
+    def call(self, pts):
+        if len(pts.shape)==2: # transform vectors
+            ## Shift
+            pts_mapped = pts + self.d[None]
+            
+            ## Rotate
+            #sin = tf.sqrt(1-tf.pow(self.cos, 2))
+            x1 = pts_mapped[:,0]*self.cos #- pts_mapped[:,1]*sin
+            x2 = pts_mapped[:,1]*self.cos #+ pts_mapped[:,0]*sin 
+            return tf.stack([x1, x2], axis =1 )
         
-        ## Rotate
-        #sin = tf.sqrt(1-tf.pow(self.cos, 2))
-        x1 = ch2_mapped[:,:,0]*self.cos #- ch2_mapped[:,:,1]*sin
-        x2 = ch2_mapped[:,:,1]*self.cos #+ ch2_mapped[:,:,0]*sin
-        return tf.stack([x1, x2], axis =2 )
-    
-    
-    @tf.function
-    def transform_vec(self, ch2):
-        ## Shift
-        ch2_mapped = ch2 + self.d[None]
+        elif len(pts.shape)==3: # transform matrices
+            ## Shift
+            pts_mapped = pts + self.d[None,None] 
+            
+            ## Rotate
+            #sin = tf.sqrt(1-tf.pow(self.cos, 2))
+            x1 = pts_mapped[:,:,0]*self.cos #- pts_mapped[:,:,1]*sin
+            x2 = pts_mapped[:,:,1]*self.cos #+ pts_mapped[:,:,0]*sin
+            return tf.stack([x1, x2], axis =2 )
         
-        ## Rotate
-        #sin = tf.sqrt(1-tf.pow(self.cos, 2))
-        x1 = ch2_mapped[:,0]*self.cos #- ch2_mapped[:,1]*sin
-        x2 = ch2_mapped[:,1]*self.cos #+ ch2_mapped[:,0]*sin 
-        return tf.stack([x1, x2], axis =1 )
+        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

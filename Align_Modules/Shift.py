@@ -25,23 +25,13 @@ class ShiftModel(tf.keras.Model):
     '''
     def __init__(self, direct=False, name='shift'):
         super().__init__(name=name)
-        self.direct=tf.Variable(direct, dtype=bool, trainable=False) # is the dataset coupled
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
 
 
-    #@tf.function 
-    def call(self, ch1, ch2):
-        if self.direct:
-            return self.transform_vec(ch2)
-        else:
-            return self.transform_mat(ch2)
-    
-    
-    #@tf.function
-    def transform_mat(self, ch2):
-        return ch2 + self.d[None,None] 
-    
-    
-    #@tf.function
-    def transform_vec(self, ch2):
-        return ch2 + self.d[None]
+    @tf.function 
+    def call(self, pts):
+        if len(pts.shape)==2: # transform vectors
+            return pts + self.d[None]
+        elif len(pts.shape)==3: # transform matrices
+            return pts + self.d[None,None] 
+        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
