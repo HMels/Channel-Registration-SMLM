@@ -110,98 +110,6 @@ class dataset(Registration):
         self.ch20.center()
         
         
-    #%% pair_functions
-    def link_dataset1(self): ##############################################DEFINITELY NEEDS TO BE OPTIMIZED
-    # links dataset with a simple iterative nearest neighbour method
-    # FrameLinking links the dataset per frame
-        print('Linking datasets...')
-        ch1_frame=self.ch1.frame.numpy()
-        ch2_frame=self.ch2.frame.numpy()
-        ch1_pos=self.ch1.pos.numpy()
-        ch2_pos=self.ch2.pos.numpy()
-        
-        (locsB,frameB)=([],[])
-        for i in range(ch1_pos.shape[0]):
-            if self.FrameLinking:
-                sameframe_pos = ch2_pos[ch2_frame==ch1_frame[i],:]
-                dists = np.sqrt(np.sum((ch1_pos[i,:]-sameframe_pos)**2,1))
-            
-                iB=np.argmin(dists)
-                locsB.append(sameframe_pos[iB,:])
-                frameB.append(ch1_frame[i])
-            else:
-                dists = np.sqrt(np.sum((ch1_pos[i,:]-ch2_pos)**2,1))
-                iB=np.argmin(dists)
-                locsB.append(ch2_pos[iB,:])
-                frameB.append(ch2_frame[iB])
-            
-        if not locsB: raise ValueError('When Linking Datasets, one of the Channels returns empty')
-        
-        del self.ch2
-        self.ch2 = Channel(locsB, frameB)
-        self.linked = True
-        
-        
-    def link_dataset(self, maxDist=1000):
-        print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
-        ch1_frame=self.ch1.frame.numpy()
-        ch2_frame=self.ch2.frame.numpy()
-        ch1_pos=self.ch1.pos.numpy()
-        ch2_pos=self.ch2.pos.numpy()
-        
-        
-        ######### DO linking in total, or iterate over the frames!!!! NOT ITERATE POSITIONS
-        locsA, locsB, frameA, frameB=([],[],[],[])
-        for i in range(ch1_pos.shape[0]):
-            if self.FrameLinking:
-                sameframe_pos = ch2_pos[ch2_frame==ch1_frame[i],:]
-                idx = self.FindNeighbours_idx(ch1_pos[i,:][None],sameframe_pos,maxDist=maxDist)[0][1]
-                if idx.size!=0:
-                    j=np.argmin( np.sum( (ch1_pos[i,:]-sameframe_pos[idx,:])**2 , axis=1))
-                    locsA.append(ch1_pos[i,:])
-                    locsB.append(sameframe_pos[j,:])
-                    frameA.append(ch1_frame[i])
-                    frameB.append(ch1_frame[j])
-            else:
-                idx = self.FindNeighbours_idx(ch1_pos[i,:][None],ch2_pos,maxDist=maxDist)[0][1]
-                if idx.size!=0:
-                    j=np.argmin( np.sum( (ch1_pos[i,:]-ch2_pos[idx,:])**2 , axis=1))
-                    locsA.append(ch1_pos[i,:])
-                    locsB.append(ch2_pos[j,:])
-                    frameA.append(ch1_frame[i])
-                    frameB.append(ch2_frame[j])
-        
-        if len(locsB)==0 or len(locsA)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
-        
-        del self.ch1, self.ch2
-        self.ch1 = Channel( np.array(locsA) , np.array(frameA) )
-        self.ch2 = Channel( np.array(locsB) , np.array(frameB) )
-        self.linked = True
-        
-        
-    def Filter_Pairs(self, maxDist=150):
-    # Filter pairs above maxDist
-        print('Filtering pairs above',maxDist,'nm...')
-        if not self.linked: raise Exception('Dataset should be linked before filtering pairs')
-        
-        dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 ,axis=1))
-        idx = np.argwhere(dists<maxDist)
-        if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
-        
-        ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
-        ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
-        ch20_pos = self.ch20.pos.numpy()[idx[:,0],:]
-        ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
-        ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
-        ch20_frame = self.ch20.frame.numpy()[idx[:,0]]
-        
-        del self.ch1, self.ch2, self.ch20
-        self.ch1 = Channel(ch1_pos, ch1_frame)
-        self.ch2 = Channel(ch2_pos, ch2_frame)
-        self.ch20 = Channel(ch20_pos, ch20_frame)
-        
-        
-        
     #%% Split dataset or load subset
     def SubsetWindow(self, subset):
     # loading subset of dataset by creating a window of size subset 
@@ -272,15 +180,127 @@ class dataset(Registration):
         return other
     
     
+    #%% pair_functions
+    def link_dataset(self, maxDist=1000,FrameLinking=None):
+        print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
+        if FrameLinking is None: FrameLinking=self.FrameLinking
+        ch1_frame=self.ch1.frame.numpy()
+        ch2_frame=self.ch2.frame.numpy()
+        ch20_frame=self.ch20.frame.numpy()
+        ch1_pos=self.ch1.pos.numpy()
+        ch2_pos=self.ch2.pos.numpy()
+        ch20_pos=self.ch20.pos.numpy()
+        
+        (pos1, frame1, pos2, frame2, pos20, frame20) = ([],[],[],[],[],[])
+        if FrameLinking: ## Linking per frame
+            frame,_=tf.unique(self.ch1.frame)
+            for fr in frame:
+                # Generate neighbouring indices per frame
+                framepos1 = ch1_pos[ch1_frame==fr,:]
+                framepos2 = ch2_pos[ch2_frame==fr,:]
+                framepos20 = ch20_pos[ch20_frame==fr,:]
+                idxlist = self.FindNeighbours_idx(framepos1, framepos2, maxDist=maxDist)
+                
+                for idx in idxlist:
+                    if len(idx[0])!=0:
+                        posA=framepos1[idx[0][0],:]
+                        posB=framepos2[idx[1],:]
+                        posB0=framepos20[idx[1],:]
+                        frame1.append(fr)
+                        frame2.append(fr)
+                        frame20.append(fr)
+                        pos1.append(posA)
+                        pos2.append(posB[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+                        pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+            
+        else: ## taking the whole dataset as a single batch
+            idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDist=maxDist)
+            for idx in idxlist:
+                if len(idx[0])!=0:
+                    i=idx[0][0]
+                    posB=ch2_pos[idx[1],:]
+                    posB0=ch20_pos[idx[1],:]
+                    j=np.argmin( np.sum((ch1_pos[i,:]-posB)**2) )
+                    
+                    frame1.append(ch1_frame[i])
+                    frame2.append(ch2_frame[idx[1][j]])
+                    frame20.append(ch20_frame[idx[1][j]])
+                    pos1.append(ch1_pos[i,:])
+                    pos2.append(posB[j,:])
+                    pos20.append(posB0[j,:])
+        
+        if len(pos1)==0 or len(pos2)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
+        
+        del self.ch1, self.ch2, self.ch20
+        self.ch1 = Channel( np.array(pos1) , np.array(frame1) )
+        self.ch2 = Channel( np.array(pos2) , np.array(frame2) )
+        self.ch20 = Channel( np.array(pos20) , np.array(frame20) )
+        self.linked = True
+        
+        
+    #%% Filter
+    def Filter(self, maxDist):
+    # The function for filtering both pairs and neigbhours 
+        if self.linked: self.Filter_Pairs(maxDist)
+        if self.Neighbours: self.Filter_Neighbours(maxDist)
+        
+        
+    def Filter_Pairs(self, maxDist=150):
+    # Filter pairs above maxDist
+        print('Filtering pairs above',maxDist,'nm...')
+        if not self.linked: raise Exception('Dataset should be linked before filtering pairs!')
+        N0=self.ch1.pos.shape[0]
+        
+        dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 , axis=1))
+        idx = np.argwhere(dists<maxDist)
+        if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
+        
+        ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
+        ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
+        ch20_pos = self.ch20.pos.numpy()[idx[:,0],:]
+        ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
+        ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
+        ch20_frame = self.ch20.frame.numpy()[idx[:,0]]
+        
+        del self.ch1, self.ch2#, self.ch20
+        self.ch1 = Channel(ch1_pos, ch1_frame)
+        self.ch2 = Channel(ch2_pos, ch2_frame)
+        self.ch20 = Channel(ch20_pos, ch20_frame)
+        N1=self.ch1.pos.shape[0]
+        print('Out of the '+str(N0)+' localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        
+        
+    def Filter_Neighbours(self, maxDist=150):
+        print('Filtering localizations that have no Neighbours under',maxDist,'nm...')
+        if not self.Neighbours: raise Exception('Tried to filter without the Neighbours having been generated')
+        N0=self.ch1NN.pos.shape[0]
+        
+        dists = np.sqrt(np.sum( (self.ch1NN.pos.numpy() - self.ch2NN.pos.numpy())**2 , axis=2))
+        minDist = np.min(dists, axis=1)
+        idx = np.argwhere(minDist<maxDist)
+        
+        ch1_pos = self.ch1NN.pos.numpy()[idx[:,0],:,:]
+        ch2_pos = self.ch2NN.pos.numpy()[idx[:,0],:,:]
+        ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
+        ch2_frame = self.ch2NN.frame.numpy()[idx[:,0]]
+        
+        del self.ch1NN, self.ch2NN
+        self.ch1NN = Channel(ch1_pos, ch1_frame)
+        self.ch2NN = Channel(ch2_pos, ch2_frame)
+        N1=self.ch1NN.pos.shape[0]
+        print('Out of the '+str(N0)+' localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        
+        
     #%% Generate Neighbours
-    def find_neighbours(self, maxDistance=50, k=20):
+    def find_neighbours(self, maxDistance=50, k=20, FrameLinking=None):
     # Tries to generate neighbours according to brightest spots, and tries kNN otherwise
         print('Finding neighbours within a distance of',maxDistance,'nm for spots containing at least',k,'neighbours...')
+        if FrameLinking is None: FrameLinking=self.FrameLinking
         maxDistance=np.float32(maxDistance)
         self.NN_maxDist=maxDistance
         self.NN_k=k
         
-        if self.FrameLinking: ## Neighbours per frame
+        if FrameLinking: ## Neighbours per frame
             frame,_=tf.unique(self.ch1.frame)
             (pos1, frame1, pos2) = ([],[],[])
             for fr in frame:
