@@ -111,41 +111,46 @@ class dataset(Registration):
         
         
     #%% Split dataset or load subset
-    def SubsetWindow(self, subset):
+    def SubsetWindow(self, subset, linked=None):
     # loading subset of dataset by creating a window of size subset 
+        if linked is None: linked=self.linked
         print('Taking a subset of size',subset,'...')
         
         self.img, self.imgsize, self.mid = self.imgparams()
         l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
         r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-    
-        idx1 = np.argwhere( (self.ch1.pos[:,0] >= l_grid[0]) * (self.ch1.pos[:,1] >= l_grid[1])
-                            * (self.ch1.pos[:,0] <= r_grid[0]) * (self.ch1.pos[:,1] <= r_grid[1]))
-        idx2 = np.argwhere( (self.ch2.pos[:,0] >= l_grid[0]) * (self.ch2.pos[:,1] >= l_grid[1])
-                            * (self.ch2.pos[:,0] <= r_grid[0]) * (self.ch2.pos[:,1] <= r_grid[1]))
 
-        return self.gather(idx1, idx2)
+        idx1 = (np.where(self.ch1.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch1.pos.numpy()[:,1] >= l_grid[1],True,False)
+                            * np.where(self.ch1.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch1.pos.numpy()[:,1] <= r_grid[1],True,False) )
+        idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= l_grid[1],True,False)
+                            * np.where(self.ch2.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= r_grid[1],True,False) )
+        if linked:
+            idx=idx1*idx2
+            return self.gather( np.argwhere(idx), np.argwhere(idx))
+        else:
+            return self.gather( np.argwhere(idx1), np.argwhere(idx2))
         
         
     def SubsetRandom(self, subset):
     # loading subset of dataset by taking a random subset
         if self.linked:
-            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
+            mask1=self.random_choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=mask1
         else:
-            mask1=np.random.choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
-            mask2=np.random.choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
+            mask1=self.random_choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
+            mask2=self.random_choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
             
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
         
         
-    def SplitDataset(self):
+    def SplitDataset(self, linked=None):
     # Splits dataset into 2 halves for cross validation)
+        if linked is None: linked=self.linked
         if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
         
         N1=self.ch1.pos.shape[0]
         N2=self.ch2.pos.shape[0]
-        if self.linked:
+        if linked:
             if N1!=N2: raise Exception('Datasets are linked but not equal in size')
             mask1=np.ones(N1, dtype=bool)
             mask1[int(N1/2):]=False
@@ -253,7 +258,6 @@ class dataset(Registration):
         
         dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 , axis=1))
         idx = np.argwhere(dists<maxDist)
-        if idx.shape[0]==0: raise ValueError('All localizations will be filtered out in current settings.')
         
         ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
         ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
@@ -262,12 +266,13 @@ class dataset(Registration):
         ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
         ch20_frame = self.ch20.frame.numpy()[idx[:,0]]
         
-        del self.ch1, self.ch2#, self.ch20
+        if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
+        del self.ch1, self.ch2, self.ch20
         self.ch1 = Channel(ch1_pos, ch1_frame)
         self.ch2 = Channel(ch2_pos, ch2_frame)
         self.ch20 = Channel(ch20_pos, ch20_frame)
         N1=self.ch1.pos.shape[0]
-        print('Out of the '+str(N0)+' localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        print('Out of the '+str(N0)+' pairs localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
         
         
     def Filter_Neighbours(self, maxDist=150):
@@ -284,11 +289,12 @@ class dataset(Registration):
         ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
         ch2_frame = self.ch2NN.frame.numpy()[idx[:,0]]
         
+        if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
         del self.ch1NN, self.ch2NN
         self.ch1NN = Channel(ch1_pos, ch1_frame)
         self.ch2NN = Channel(ch2_pos, ch2_frame)
         N1=self.ch1NN.pos.shape[0]
-        print('Out of the '+str(N0)+' localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        print('Out of the '+str(N0)+' Neighbours localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
         
         
     #%% Generate Neighbours
@@ -310,8 +316,8 @@ class dataset(Registration):
                 
                 # make sure the arrays are equal in size by taking equal random sample
                 nmax=np.min((framepos1.shape[0], framepos2.shape[0]))
-                framepos1 = framepos1[np.random.choice(framepos1.shape[0], nmax),:]
-                framepos2 = framepos2[np.random.choice(framepos2.shape[0], nmax),:]
+                framepos1 = framepos1[self.random_choice(framepos1.shape[0], nmax),:]
+                framepos2 = framepos2[self.random_choice(framepos2.shape[0], nmax),:]
                 idx1, idx2 = self.find_BrightNN(framepos1, framepos2)
                 
                 # Fill in the positions and frames 
@@ -353,7 +359,7 @@ class dataset(Registration):
                 if idx.size>0 and idx.shape[1] > self.NN_k: # filter for brightest spots above threshold
                     # select random sample from brightest spost
                     idx1list.append(idx[0, :self.NN_k]) 
-                    idx2list.append(idx[1, np.random.choice(idx.shape[1], self.NN_k)]) 
+                    idx2list.append(idx[1, self.random_choice(idx.shape[1], self.NN_k)]) 
                     
             ## look if neighbours actually have been found
             if idx1list==[]: 
@@ -393,3 +399,9 @@ class dataset(Registration):
     
         
     
+    def random_choice(self,original_length, final_length):
+        lst=[]
+        while len(lst)<final_length:
+            r=np.random.randint(0,original_length)
+            if r not in lst: lst.append(r)
+        return lst

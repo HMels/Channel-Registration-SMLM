@@ -120,15 +120,25 @@ class Registration(Plot):
         pos2 = model(pos2)
         if self.linked: # for linked dataset, this metric will be the square distance
             loss = tf.reduce_sum(tf.square(pos1-pos2))
+        elif self.Neighbours:       # for non-linked datasets, this metric will be the Relative Entropy with a NN algorithm
+            CRLB = 25
+            D_KL = tf.reduce_sum( tf.square(pos1 - pos2) / CRLB**2 , axis=2)*0.5
+            D_KL /= 100
+            exp=tf.math.exp( -1*D_KL  )
+            exp_sum=tf.reduce_sum( exp, axis = 1)/pos2.shape[1]
+            loss1 = ( -1*tf.math.log( exp_sum ) )
+            loss=tf.reduce_sum(loss1)/pos2.shape[0]
+            #print('D_KL_norm=',D_KL)
+            #print('exp=',exp)
+            #print('exp_sum=',exp_sum)
+            #print('loss1=',loss1)
+            #print('loss_tot=',loss)
+            if tf.math.is_nan(loss): raise ValueError('Loss function returns infinities!')
+        else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
+        '''
         elif self.Neighbours:
             loss = tf.reduce_sum(tf.square( pos1 - pos2  ), axis=(1,2))/pos1.shape[1]     
         '''
-        elif self.Neighbours:       # for non-linked datasets, this metric will be the Relative Entropy with a NN algorithm
-            CRLB = .15
-            D_KL = 0.5*tf.reduce_sum( tf.square(pos1 - pos2) / CRLB**2 , axis=2)
-            loss = ( -1*tf.math.log( tf.reduce_sum( tf.math.exp( -1*D_KL / pos2.shape[1] ) / pos2.shape[0], axis = 1) ) ) 
-        '''
-        #else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
         return loss
     
     
@@ -144,7 +154,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Shift Mapping (lr, #it)='+str((lr, epochs))+'...')
+        print('Training Shift Mapping (lr,#it)='+str((lr,epochs))+'...')
         _ = self.train_model(self.ShiftModel, epochs, opt)
 
 
@@ -162,7 +172,7 @@ class Registration(Plot):
     def Train_RigidBody(self, lr=1, epochs=200):
     # Training the RigidBody Mapping
         if self.RigidBodyModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(self.mid)!=0: 
+        if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
@@ -170,7 +180,7 @@ class Registration(Plot):
         opt1=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training RigidBody Mapping (lr, #it)='+str((lr, epochs))+'...')
+        print('Training RigidBody Mapping (lr,#it)='+str((lr,epochs))+'...')
         _ = self.train_model(self.RigidBodyModel, epochs, opt1)
         
         ## then train the d vector (shift)
@@ -184,7 +194,7 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         if self.RigidBodyModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if tf.math.count_nonzero(self.mid)!=0: 
+            if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming RigidBody Mapping...')
             self.ch2.pos.assign(self.RigidBodyModel(self.ch2.pos))
@@ -196,14 +206,14 @@ class Registration(Plot):
     def Train_Affine(self, lr=1, epochs=200):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(self.mid)!=0: 
+        if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
         self.AffineModel=AffineModel()
         
         # Training the Model
-        print('Training Affine Mapping with (lr, #it)='+str((lr, epochs))+'...')
+        print('Training Affine Mapping with (lr,#it)='+str((lr,epochs))+'...')
         # first train the A matrix (rot, shear, scaling)
         opt1=tf.optimizers.Adagrad(lr)
         _ = self.train_model(self.AffineModel, epochs, opt1)
@@ -221,7 +231,7 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         if self.AffineModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if tf.math.count_nonzero(self.mid)!=0: 
+            if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming Affine Mapping...')
             self.ch2.pos.assign(self.AffineModel(self.ch2.pos))
@@ -239,7 +249,7 @@ class Registration(Plot):
         opt=tf.optimizers.Adagrad(lr)
         
         # Training the Model
-        print('Training Polynomial3Model Mapping with (lr, #it)='+str((lr, epochs))+'...')
+        print('Training Polynomial3Model Mapping with (lr,#it)='+str((lr,epochs))+'...')
         _ = self.train_model(self.Polynomial3Model, epochs, opt)
         
     
@@ -305,7 +315,7 @@ class Registration(Plot):
         self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
         
         ## Training the Model
-        print('Training Splines Mapping (lr, #it, gridsize)='+str((lr, epochs, gridsize))+'...')
+        print('Training Splines Mapping (lr,#it,gridsize)='+str((lr,epochs,gridsize))+'...')
         _ = self.train_model(self.SplinesModel, epochs, opt, ch1_input, ch2_input)
         self.ControlPoints = self.SplinesModel.ControlPoints
                 
