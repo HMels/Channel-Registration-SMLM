@@ -13,6 +13,7 @@ Created on Fri Sep 10 15:03:46 2021
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import tensorflow as tf
 
 class Plot:
     def __init__(self):
@@ -332,4 +333,97 @@ class Plot:
         plt.xlabel('x1')
         plt.ylabel('x2')
         plt.title('Single Channel view')
+        plt.tight_layout()
+        
+        
+    #%% Plotting the Grid
+    def plot_SplineGrid(self, ch1=None, ch2=None, ch20=None, locs_markersize=10,
+                        CP_markersize=8, d_grid=.1, grid_markersize=3, grid_opacity=1): 
+        '''
+        Plots the grid and the shape of the grid in between the Control Points
+    
+        Parameters
+        ----------
+        ch1 , ch2 , ch20 : Nx2 tf.float32 tensor
+            The tensor containing the localizations.
+        d_grid : float, optional
+            The precission of the grid we want to plot in between the
+            ControlPoints. The default is .1.
+        lines_per_CP : int, optional
+            The number of lines we want to plot in between the grids. 
+            Works best if even. The default is 1.
+        locs_markersize : float, optional
+            The size of the markers of the localizations. The default is 10.
+        CP_markersize : float, optional
+            The size of the markers of the Controlpoints. The default is 8.
+        grid_markersize : float, optional
+            The size of the markers of the grid. The default is 3.
+        grid_opacity : float, optional
+            The opacity of the grid. The default is 1.
+    
+        Returns
+        -------
+        None.
+    
+        '''
+        print('Plotting the Spline Grid...')
+        if ch1 is None:
+            ch1=self.ch1.pos
+            ch2=self.ch2.pos
+            ch20=self.ch20.pos
+        
+        ## The original points
+        ch1 = tf.Variable( tf.stack([
+            (ch1[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+            (ch1[:,1] - np.min(ch20[:,1])) + self.edge_grids*self.gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        ch2 = tf.Variable( tf.stack([
+            (ch2[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+            (ch2[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        ch20 = tf.Variable( tf.stack([
+            (ch20[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+            (ch20[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        
+        # plotting the localizations
+        plt.figure()
+        plt.scatter(ch2[:,0],ch2[:,1], c='red', marker='.', s=locs_markersize, label='Mapped CH2')
+        plt.scatter(ch20[:,0],ch20[:,1], c='orange', marker='.', 
+                    alpha=.7, s=locs_markersize-2, label='Original CH2')
+        plt.scatter(ch1[:,0],ch1[:,1], c='green', marker='.', s=locs_markersize, label='Original CH1')
+               
+        
+        ## Horizontal Grid
+        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
+        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid*2)
+        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
+        
+        ## Vertical Grid
+        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid*2)
+        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
+        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
+        
+        Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
+        plt.scatter(Grid[:,0], Grid[:,1], c='c', marker='.', s=grid_markersize, alpha=grid_opacity)
+        
+        
+        ## Controlpoints Grid
+        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
+        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
+        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
+        
+        ## Vertical Grid
+        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
+        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
+        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
+        
+        Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
+        plt.scatter(Grid[:,0], Grid[:,1], c='b', marker='.', s=grid_markersize, alpha=grid_opacity)
+        
+        # plotting the ControlPoints
+        plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
+                    c='b', marker='o', s=CP_markersize, label='ControlPoints')
+        
+        plt.legend()
         plt.tight_layout()

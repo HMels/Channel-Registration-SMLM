@@ -24,6 +24,7 @@ class dataset(Registration):
         self.linked=linked        # is the data linked/paired?
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
+        self.subset=1
         Registration.__init__(self)
         
         
@@ -124,6 +125,8 @@ class dataset(Registration):
                             * np.where(self.ch1.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch1.pos.numpy()[:,1] <= r_grid[1],True,False) )
         idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= l_grid[1],True,False)
                             * np.where(self.ch2.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= r_grid[1],True,False) )
+        
+        self.subset*=subset
         if linked:
             idx=idx1*idx2
             return self.gather( np.argwhere(idx), np.argwhere(idx))
@@ -139,6 +142,7 @@ class dataset(Registration):
         else:
             mask1=self.random_choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=self.random_choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
+        self.subset*=subset
             
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
         

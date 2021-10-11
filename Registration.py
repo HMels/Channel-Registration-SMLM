@@ -145,13 +145,13 @@ class Registration(Plot):
     #%% Global Transforms (Affine, Polynomial3, RigidBody)
     ## Shift
     #@tf.function
-    def Train_Shift(self, lr=100, epochs=100):
+    def Train_Shift(self, lr=100, epochs=100, opt_fn=tf.optimizers.Adagrad):
     # Training the RigidBody Mapping
         if self.ShiftModel is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
         self.ShiftModel=ShiftModel()
-        opt=tf.optimizers.Adagrad(lr)
+        opt=opt_fn(lr)
         
         # Training the Model
         print('Training Shift Mapping (lr,#it)='+str((lr,epochs))+'...')
@@ -169,15 +169,15 @@ class Registration(Plot):
     
     
     ## RigidBody
-    def Train_RigidBody(self, lr=1, epochs=200):
+    def Train_RigidBody(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the RigidBody Mapping
         if self.RigidBodyModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
+        if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
         self.RigidBodyModel=RigidBodyModel()
-        opt1=tf.optimizers.Adagrad(lr)
+        opt1=opt_fn(lr)
         
         # Training the Model
         print('Training RigidBody Mapping (lr,#it)='+str((lr,epochs))+'...')
@@ -186,7 +186,7 @@ class Registration(Plot):
         ## then train the d vector (shift)
         self.RigidBodyModel.d._trainable=True
         self.RigidBodyModel.cos._trainable=False
-        opt2=tf.optimizers.Adagrad(lr)
+        opt2=opt_fn(lr)
         _ = self.train_model(self.RigidBodyModel, epochs, opt2)
 
     
@@ -194,7 +194,7 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         if self.RigidBodyModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
+            if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming RigidBody Mapping...')
             self.ch2.pos.assign(self.RigidBodyModel(self.ch2.pos))
@@ -203,10 +203,10 @@ class Registration(Plot):
         
         
     ## Affine
-    def Train_Affine(self, lr=1, epochs=200):
+    def Train_Affine(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
+        if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
             print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
         
         # initializing the model and optimizer
@@ -215,14 +215,14 @@ class Registration(Plot):
         # Training the Model
         print('Training Affine Mapping with (lr,#it)='+str((lr,epochs))+'...')
         # first train the A matrix (rot, shear, scaling)
-        opt1=tf.optimizers.Adagrad(lr)
+        opt1=opt_fn(lr)
         _ = self.train_model(self.AffineModel, epochs, opt1)
         
         
         ## then train the d vector (shift)
         self.AffineModel.d._trainable=True
         self.AffineModel.A._trainable=False
-        opt2=tf.optimizers.Adagrad(lr)
+        opt2=opt_fn(lr)
         _ = self.train_model(self.AffineModel, epochs, opt2)
         
         
@@ -231,7 +231,7 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         if self.AffineModel is None: print('Model not trained yet, will pass without transforming.')
         else:
-            if tf.math.count_nonzero(np.round(self.mid,0))!=0: 
+            if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming Affine Mapping...')
             self.ch2.pos.assign(self.AffineModel(self.ch2.pos))
@@ -240,13 +240,13 @@ class Registration(Plot):
       
         
     ## Polynomial3
-    def Train_Polynomial3(self, lr=1, epochs=200):
+    def Train_Polynomial3(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the Polynomial3 Mapping
         if self.Polynomial3Model is not None: raise Exception('Models can only be trained once')
         
         # initializing the model and optimizer
         self.Polynomial3Model=Polynomial3Model()
-        opt=tf.optimizers.Adagrad(lr)
+        opt=opt_fn(lr)
         
         # Training the Model
         print('Training Polynomial3Model Mapping with (lr,#it)='+str((lr,epochs))+'...')
@@ -264,7 +264,7 @@ class Registration(Plot):
         
         
     #%% CatmullRom Splines
-    def Train_Splines(self, lr=1, epochs=200, gridsize=1000, edge_grids=1):
+    def Train_Splines(self, lr=1, epochs=200, gridsize=1000, edge_grids=1, opt_fn=tf.optimizers.Adagrad):
     # Training the Splines Mapping. lr is the learningrate, epochs the number of iterations
     # gridsize the size of the Spline grids and edge_grids the number of gridpoints extra at the edge
         if self.SplinesModel is not None: raise Exception('Models can only be trained once')
@@ -311,7 +311,7 @@ class Registration(Plot):
             
             
         ## initializing optimizer
-        opt=tf.optimizers.Adagrad(lr)
+        opt=opt_fn(lr)
         self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
         
         ## Training the Model

@@ -141,7 +141,7 @@ class dataset_simulation(dataset):
     
     def relink_dataset(self):
         self.linked=True 
-        N=np.min((self.ch1.pos.shape[0],self.ch2.pos.shape[0]))
+        N=int(np.min((self.ch1.pos.shape[0],self.ch2.pos.shape[0]))/(1+self.noise))
         frame1=self.ch1.frame.numpy()
         frame2=self.ch2.frame.numpy()
         frame20=self.ch20.frame.numpy()
