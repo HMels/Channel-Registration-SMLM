@@ -12,6 +12,8 @@ Created on Fri Sep 10 15:03:46 2021
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+import scipy.special as scpspc
 import matplotlib as mpl
 import tensorflow as tf
 
@@ -115,7 +117,7 @@ class Plot:
             return avg1, fig, (ax1, ax2)
 
 
-    def ErrorDistribution(self, nbins=30, FrameLinking=False):
+    def ErrorDistribution(self, nbins=30):
     # just plots the error distribution after mapping
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         pos1=self.ch1.pos_all()
@@ -134,7 +136,7 @@ class Plot:
         plt.tight_layout()
         
         
-    def ErrorDistribution_xy(self, nbins=30, xlim=31, FrameLinking=False):
+    def ErrorDistribution_xy(self, nbins=30, xlim=31):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
@@ -168,9 +170,57 @@ class Plot:
         ax[1].legend()
         fig.tight_layout()
         
+        
+    def ErrorDistribution_r(self, nbins=30, xlim=31, error=None):
+        if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
+        pos1=self.ch1.pos_all()
+        pos2=self.ch2.pos_all()
+            
+        # Calculating the error
+        dist, avg, r = self.ErrorDist(pos1, pos2)
+        
+        # plotting the histogram
+        plt.figure()
+        n=plt.hist(dist, label='data', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        #plt.axvline(x=avg, label='average='+str(round(avg,2))+'[nm]')
+        ymax = np.max(n[0])*1.1
+        
+        
+        ## fit bar plot data using curve_fit
+        def func(r, sigma):
+            # from Churchman et al 2006
+            '''
+            I think A needs to be pos1.shape[0]*bin_width
+            '''
+            sigma2=sigma**2
+            return r/sigma2*np.exp(-r**2/2/sigma2)
+            #return A*(r/sigma2)/(2*np.pi)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
+        
+        N = pos1.shape[0] * ( n[1][1]-n[1][0] )
+        xn=(n[1][:-1]+n[1][1:])/2
+        popt, pcov = curve_fit(func, xn, n[0]/N)
+        x = np.linspace(0, xlim, 1000)
+        y = func(x, *popt)*N
+        plt.plot(x, y, c='g',label=(r'fit: $\sigma$='+str(round(popt[0],2))+'[nm] ($\mu$ is kept at 0 [nm])'))
+        
+        ## plot how function should look like
+        if error is not None:
+            sgm=np.sqrt(2)*error
+            y = func(x, sgm)*N
+            plt.plot(x, y, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
+            if np.max(y)>ymax: ymax=np.max(y)*1.1
+
+        # Some extra plotting parameters
+        plt.ylim([0,ymax])
+        plt.xlim([0,xlim])
+        plt.xlabel('Absolute error [nm]')
+        plt.ylabel('# of localizations')
+        plt.legend()
+        plt.tight_layout()
+        
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic', FrameLinking=False):
+    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
         ## Coupling Dataset1 if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         dist = self.ch1.pos_all()-self.ch2.pos_all()
