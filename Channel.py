@@ -31,3 +31,4 @@ class Channel:
       
     def center(self):
         self.pos.assign(self.pos - tf.reduce_mean(self.pos,axis=0))
+        

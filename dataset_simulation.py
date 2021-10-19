@@ -7,15 +7,18 @@ Created on Fri Oct  8 09:54:37 2021
 import copy
 import numpy as np
 import numpy.random as rnd
+import pandas as pd
 
+from photonpy import Dataset
 from dataset import dataset
 from Channel import Channel
 
 class dataset_simulation(dataset):
-    def __init__(self, pix_size=1, linked=False, imgshape=[512, 512], 
+    def __init__(self, pix_size=1, linked=False, loc_error=10, imgshape=[512, 512], 
                  FrameLinking=False, FrameOptimization=False):
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.imgshape=imgshape    # number of pixels of the dataset
+        self.loc_error=loc_error  # localization error
         self.linked=linked        # is the data linked/paired?
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
@@ -24,13 +27,11 @@ class dataset_simulation(dataset):
         
         
     #%% generate functions
-    def generate_dataset_beads(self, N=216, error=10, noise=0.005, deform=None):
+    def generate_dataset_beads(self, N=216, deform=None):
         pos1=np.array(self.imgshape*rnd.rand(N,2)*self.pix_size, dtype=np.float32) # generate channel positions
         pos2=copy.copy(pos1)
-        pos1=self.generate_locerror(pos1, error) # Generate localization error
-        pos2=self.generate_locerror(pos2, error)
-        pos1=self.generate_noise(pos1, noise) # Generate noise
-        pos2=self.generate_noise(pos2, noise)
+        pos1=self.generate_locerror(pos1, self.loc_error) # Generate localization error
+        pos2=self.generate_locerror(pos2, self.loc_error)
         if deform is not None: pos2=deform.deform(pos2) # deform  channel
         #if not self.linked: pos2=self.shuffle(pos2) # if channel is not linked, shuffle indices
         # load into channels
@@ -43,13 +44,11 @@ class dataset_simulation(dataset):
         
     
     def generate_dataset_clusters(self, Nclust=600, N_per_clust=250, std_clust=25,
-                                 error=10, noise=0.1, deform=None):
+                                 error=10, deform=None):
         pos1 = self.generate_cluster_pos(Nclust, N_per_clust, std_clust) # generate channels
         pos2 = copy.copy(pos1)
         pos1=self.generate_locerror(pos1, error) # Generate localization error
-        pos2=self.generate_locerror(pos2, error)
-        pos1=self.generate_noise(pos1, noise) # Generate noise
-        pos2=self.generate_noise(pos2, noise)        
+        pos2=self.generate_locerror(pos2, error)     
         if deform is not None: pos2=deform.deform(pos2) # deform  channel
         #if not self.linked: pos2=self.shuffle(pos2) # if channel is not linked, shuffle indices
         # load into channels     
@@ -93,23 +92,11 @@ class dataset_simulation(dataset):
     #%% miscalleneous functions
     def generate_locerror(self, pos, error):
     # Generates a Gaussian localization error over the localizations
-        self.error=error
-        if self.error != 0:
-            pos[:,0] += rnd.normal(0, self.error, pos.shape[0])
-            pos[:,1] += rnd.normal(0, self.error, pos.shape[0])
+        self.loc_error=error
+        if self.loc_error != 0:
+            pos[:,0] += rnd.normal(0, self.loc_error, pos.shape[0])
+            pos[:,1] += rnd.normal(0, self.loc_error, pos.shape[0])
         return pos
-            
-            
-    def generate_noise(self, pos, noise):
-    # generates some noise
-        self.noise=noise
-        if self.noise!=0:
-            Nlocs = np.array([
-                np.float32( self.imgshape[0] * rnd.rand( int(self.noise * pos.shape[0])) * self.pix_size),
-                np.float32( self.imgshape[1] * rnd.rand( int(self.noise * pos.shape[0])) * self.pix_size)
-                ])
-            return np.append(pos, ( Nlocs.transpose() ), axis=0)
-        else: return pos
         
         
     def shuffle(self, pos):
@@ -153,7 +140,95 @@ class dataset_simulation(dataset):
         self.ch2 = Channel( pos2[:N,:] , frame2[:N] )
         self.ch20 = Channel( pos20[:N,:] , frame20[:N] )
             
+         
             
+#%% Dataset copy
+class dataset_copy(dataset):
+    def __init__(self, path, pix_size=1, loc_error=10, linked=False, imgshape=[512, 512], 
+                 FrameLinking=True, FrameOptimization=False):
+        self.path=path            # the string or list containing the strings of the file location of the dataset
+        self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
+        self.loc_error=loc_error  # localization error
+        self.imgshape=imgshape    # number of pixels of the dataset
+        self.linked=linked        # is the data linked/paired?
+        self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
+        self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
+        self.subset=1
+        dataset.__init__(self, path,pix_size=pix_size,linked=linked,imgshape=imgshape,
+                         FrameLinking=FrameLinking,FrameOptimization=FrameOptimization)
+    
+    
+    def load_copydataset_hdf5(self, deform):
+        print('Loading dataset...')
+        ds = Dataset.load(self.path,saveGroups=True)
+        try: ch1 = ds[ds.group==0]
+        except: ch1 = ds
+        
+        pos1 = ch1.pos* self.pix_size
+        pos2 = copy.copy(pos1)
+        pos1 = self.generate_locerror(pos1, self.loc_error) # Generate localization error
+        pos2 = self.generate_locerror(pos2, self.loc_error) # Generate localization error
+        pos2 = deform.deform(pos2) # deform  channel
+        self.ch1 = Channel(pos = pos1, frame = ch1.frame)
+        self.ch2 = Channel(pos = pos2, frame = ch1.frame)
+        
+        self.ch20=copy.deepcopy(self.ch2)
+        self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
+        self.center_image()
+        
+        
+    #%% miscalleneous functions
+    def generate_locerror(self, pos, error):
+    # Generates a Gaussian localization error over the localizations
+        self.loc_error=error
+        if self.loc_error != 0:
+            pos[:,0] += rnd.normal(0, self.loc_error, pos.shape[0])
+            pos[:,1] += rnd.normal(0, self.loc_error, pos.shape[0])
+        return pos
+        
+        
+    def shuffle(self, pos):
+        idx=np.arange(0,pos.shape[0]).astype('int')
+        rnd.shuffle(idx)
+        return pos[idx,:]
+        
+
+    def gauss_2d(self, mu, sigma, N):
+        '''
+        Generates a 2D gaussian cluster
+        Parameters
+        ----------
+        mu : 2 float array
+            The mean location of the cluster.
+        sigma : 2 float array
+            The standard deviation of the cluster.
+        N : int
+            The number of localizations.
+        Returns
+        -------
+        Nx2 float Array
+            The [x1,x2] localizations .
+        '''
+        x1 = np.float32( rnd.normal(mu[0], sigma[0], N) )
+        x2 = np.float32( rnd.normal(mu[1], sigma[1], N) )
+        return np.array([x1, x2]).transpose()
+    
+    
+    def relink_dataset(self):
+        self.linked=True 
+        N=int(np.min((self.ch1.pos.shape[0],self.ch2.pos.shape[0]))/(1+self.noise))
+        frame1=self.ch1.frame.numpy()
+        frame2=self.ch2.frame.numpy()
+        frame20=self.ch20.frame.numpy()
+        pos1=self.ch1.pos.numpy()
+        pos2=self.ch2.pos.numpy()
+        pos20=self.ch20.pos.numpy()
+        del self.ch1, self.ch2, self.ch20
+        self.ch1 = Channel( pos1[:N,:] , frame1[:N] )
+        self.ch2 = Channel( pos2[:N,:] , frame2[:N] )
+        self.ch20 = Channel( pos20[:N,:] , frame20[:N] )
+        
+        
             
 #%% Deform class
 class Deform():
@@ -278,3 +353,25 @@ class Deform():
             (1/self.scaling[1]) * locs[:,1]
             ]).transpose()
         return locs
+    
+    
+#%% Affine Deform
+class Affine_Deform():
+    def __init__(self,A=np.array([[ 1.0031357 ,  0.00181658, -1.3986971], 
+                                  [-0.00123012,  0.9972918, 3.3556707 ]]) ):
+        self.A=A if A is not None else np.array([ [1,0,0],[0,1,0] ])
+        
+    def deform(self, locs):
+        x1 = locs[:,0]*self.A[0,0] + locs[:,1]*self.A[0,1]
+        x2 = locs[:,0]*self.A[1,0] + locs[:,1]*self.A[1,1]
+        x1+=self.A[0,2]
+        x2+=self.A[1,2]
+        return np.stack([x1, x2], axis =1 )
+        
+    def ideform(self, locs):
+        locs-=self.A[:,2]
+        det=self.A[0,0]*self.A[1,1]-self.A[1,0]*self.A[0,1]
+        if det==0: raise ValueError('Affine transform is not invertible')
+        x1 = locs[:,0]*self.A[1,1] - locs[:,1]*self.A[0,1]
+        x2 = -locs[:,0]*self.A[1,0] + locs[:,1]*self.A[0,0]
+        return np.stack([x1, x2], axis =1 )/det

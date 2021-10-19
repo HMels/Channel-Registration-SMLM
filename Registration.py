@@ -44,7 +44,6 @@ class Registration(Plot):
         self.ControlPoints=None
         self.NN_maxDist=None
         self.NN_threshold=None
-        self.NN_k=None
         self.Neighbours=False       
         Plot.__init__(self)
                 
@@ -118,27 +117,7 @@ class Registration(Plot):
     def loss_fn(self, model, pos1, pos2):
     # The metric that will be optimized
         pos2 = model(pos2)
-        if self.linked: # for linked dataset, this metric will be the square distance
-            loss = tf.reduce_sum(tf.square(pos1-pos2))
-        elif self.Neighbours:       # for non-linked datasets, this metric will be the Relative Entropy with a NN algorithm
-            CRLB = 25
-            D_KL = tf.reduce_sum( tf.square(pos1 - pos2) / CRLB**2 , axis=2)*0.5
-            D_KL /= 100
-            exp=tf.math.exp( -1*D_KL  )
-            exp_sum=tf.reduce_sum( exp, axis = 1)/pos2.shape[1]
-            loss1 = ( -1*tf.math.log( exp_sum ) )
-            loss=tf.reduce_sum(loss1)/pos2.shape[0]
-            #print('D_KL_norm=',D_KL)
-            #print('exp=',exp)
-            #print('exp_sum=',exp_sum)
-            #print('loss1=',loss1)
-            #print('loss_tot=',loss)
-            if tf.math.is_nan(loss): raise ValueError('Loss function returns infinities!')
-        else: raise Exception('Trying to calculate loss without Dataset being linked or Neighbours!')
-        '''
-        elif self.Neighbours:
-            loss = tf.reduce_sum(tf.square( pos1 - pos2  ), axis=(1,2))/pos1.shape[1]     
-        '''
+        loss = tf.reduce_sum(tf.square(pos1-pos2))
         return loss
     
     
@@ -162,10 +141,12 @@ class Registration(Plot):
     # Transforms ch2 according to the Model
         print('Transforming Shift Mapping...')
         if self.ShiftModel is None: print('Model not trained yet, will pass without transforming.')
-        else:
-            self.ch2.pos.assign(self.ShiftModel(self.ch2.pos))
-            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
-                raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')    
+        else: 
+            ch2_mapped=self.ShiftModel(self.ch2.pos)
+            if tf.reduce_any(tf.math.is_nan( ch2_mapped )): 
+                raise ValueError('ch2 contains infinities. The Shift mapping likely exploded.')
+            self.ch2.pos.assign(ch2_mapped)
+            if self.Neighbours: self.ch2NN.pos.assign(self.ShiftModel(self.ch2NN.pos)) 
     
     
     ## RigidBody
@@ -197,10 +178,12 @@ class Registration(Plot):
             if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming RigidBody Mapping...')
-            self.ch2.pos.assign(self.RigidBodyModel(self.ch2.pos))
-            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
+            ch2_mapped=self.RigidBodyModel(self.ch2.pos)
+            if tf.reduce_any(tf.math.is_nan( ch2_mapped )): 
                 raise ValueError('ch2 contains infinities. The RigidBody mapping likely exploded.')
-        
+            self.ch2.pos.assign(ch2_mapped)
+            if self.Neighbours: self.ch2NN.pos.assign(self.RigidBodyModel(self.ch2NN.pos))
+            
         
     ## Affine
     def Train_Affine(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
@@ -234,9 +217,11 @@ class Registration(Plot):
             if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
                 print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
             print('Transforming Affine Mapping...')
-            self.ch2.pos.assign(self.AffineModel(self.ch2.pos))
-            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
+            ch2_mapped=self.AffineModel(self.ch2.pos)
+            if tf.reduce_any(tf.math.is_nan( ch2_mapped )): 
                 raise ValueError('ch2 contains infinities. The Affine mapping likely exploded.')
+            self.ch2.pos.assign(ch2_mapped)
+            if self.Neighbours: self.ch2NN.pos.assign(self.AffineModel(self.ch2NN.pos))
       
         
     ## Polynomial3
@@ -258,9 +243,11 @@ class Registration(Plot):
         print('Transforming Polynomial3 Mapping...')
         if self.Polynomial3Model is None: print('Model not trained yet, will pass without transforming.')
         else:
-            self.ch2.pos.assign(self.Polynomial3Model(self.ch2.pos))
-            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )): 
+            ch2_mapped=self.Polynomial3Model(self.ch2.pos)
+            if tf.reduce_any(tf.math.is_nan( ch2_mapped )): 
                 raise ValueError('ch2 contains infinities. The Polynomial3 mapping likely exploded.')
+            self.ch2.pos.assign(ch2_mapped)
+            if self.Neighbours: self.ch2NN.pos.assign(self.Polynomial3Model(self.ch2NN.pos))
         
         
     #%% CatmullRom Splines
@@ -287,7 +274,7 @@ class Registration(Plot):
         x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
         self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
         
-        ## Create Nearest Neighbours       
+        ## Create Nearest Neighbours
         if self.linked:
             ## Create variables normalized by gridsize
             ch1_input = Channel( tf.Variable( tf.stack([
@@ -298,17 +285,18 @@ class Registration(Plot):
                 self.ch2.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
                 self.ch2.pos[:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch2.frame )
-        else:
+        elif self.Neighbours:
             ## Create variables normalized by gridsize
             ch1_input = Channel( tf.Variable( tf.stack([
-                self.ch1NN.pos[:,:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch1NN.pos[:,:,1] / gridsize - self.x2_min + self.edge_grids
+                self.ch1NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch1NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch1NN.frame )
             ch2_input = Channel( tf.Variable( tf.stack([
-                self.ch2NN.pos[:,:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch2NN.pos[:,:,1] / gridsize - self.x2_min + self.edge_grids
+                self.ch2NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                self.ch2NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
                 ], axis=-1), dtype=tf.float32, trainable=False), self.ch2NN.frame )
-            
+        else: 
+            raise Exception('Trying to calculate loss without Dataset being linked or Neighbours being generated!')
             
         ## initializing optimizer
         opt=opt_fn(lr)
@@ -335,9 +323,23 @@ class Registration(Plot):
                 
             # transform the new ch2 model
             pos1_mapped =  self.SplinesModel(pos1) 
+            if tf.reduce_any(tf.math.is_nan( pos1_mapped )):
+                raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.') 
             self.ch2.pos.assign(tf.stack([
                 (pos1_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
                 (pos1_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
                 ], axis=-1))
-            if tf.reduce_any(tf.math.is_nan( self.ch2.pos )):
-                raise ValueError('ch2 contains infinities. The Splines mapping likely exploded.')
+            
+            if self.Neighbours:
+                ## Create variables normalized by gridsize
+                pos1NN = tf.Variable( tf.stack([
+                    self.ch2NN.pos[:,0] / self.gridsize - self.x1_min + self.edge_grids,
+                    self.ch2NN.pos[:,1] / self.gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False) 
+                # transform the new ch2 model
+                pos1NN_mapped =  self.SplinesModel(pos1NN) 
+                self.ch2NN.pos.assign(tf.stack([
+                    (pos1NN_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
+                    (pos1NN_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
+                    ], axis=-1))
+            

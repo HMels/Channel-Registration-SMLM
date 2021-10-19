@@ -141,20 +141,27 @@ class Plot:
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
             
-        
-        distx=pos1[:,0]-pos2[:,0]
-        avgx = np.average(distx)
-        stdx = np.std(distx)
-        disty=pos1[:,1]-pos2[:,1]
-        avgy = np.average(disty)
-        stdy = np.std(disty)
-            
         fig, ax = plt.subplots(1,2,figsize=(12,6))
-
-        nx = ax[0].hist(distx, label=(r'$\mu$ = '+str(round(avgx,2))+'nm, $\sigma$ = '+str(round(stdx,2))+'nm'),
-                        alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        ny = ax[1].hist(disty, label=(r'$\mu$ = '+str(round(avgy,2))+'nm, $\sigma$ = '+str(round(stdy,2))+'nm'),
-                        alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        distx=pos1[:,0]-pos2[:,0]
+        disty=pos1[:,1]-pos2[:,1]
+        nx = ax[0].hist(distx, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        ny = ax[1].hist(disty, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        
+         ## fit bar plot data using curve_fit
+        def func(r, mu, sigma):
+            return np.exp(-(r - mu) ** 2 / (2 * sigma ** 2))
+        
+        Nx = pos1.shape[0] * ( nx[1][1]-nx[1][0] )
+        Ny = pos1.shape[0] * ( ny[1][1]-ny[1][0] )
+        xn=(nx[1][:-1]+nx[1][1:])/2
+        yn=(ny[1][:-1]+ny[1][1:])/2
+        poptx, pcovx = curve_fit(func, xn, nx[0]/Nx)
+        popty, pcovy = curve_fit(func, yn, ny[0]/Ny)
+        x = np.linspace(0, xlim, 1000)
+        yx = func(x, *poptx)*Nx
+        yy = func(x, *popty)*Ny
+        plt.plot(x, yx, c='g',label=(r'fit: $\mu$='+str(round(poptx[0],2))+'$\sigma$='+str(round(poptx[0],2))+'[nm]'))
+        plt.plot(x, yy, c='g',label=(r'fit: $\mu$='+str(round(popty[0],2))+'$\sigma$='+str(round(popty[0],2))+'[nm]'))
         
         ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
         ax[0].set_ylim([0,ymax])
@@ -285,8 +292,6 @@ class Plot:
             ax[1].set_aspect('equal', 'box')
             fig.tight_layout()
         
-        
-            
     
         
     #%% Channel to matrix fn
