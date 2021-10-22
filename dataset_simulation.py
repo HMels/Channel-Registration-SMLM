@@ -37,7 +37,7 @@ class dataset_simulation(dataset):
         # load into channels
         self.ch1 = Channel(pos=pos1, frame=np.ones(pos1.shape[0]))
         self.ch2 = Channel(pos=pos2, frame=np.ones(pos2.shape[0]))
-        # Copy channel and generate noise
+        # Copy channel
         self.ch20=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image()
@@ -54,7 +54,7 @@ class dataset_simulation(dataset):
         # load into channels     
         self.ch1 = Channel(pos=pos1, frame=np.random.choice(np.arange(0,10),(pos1.shape[0])))
         self.ch2 = Channel(pos=pos2, frame=np.random.choice(np.arange(0,10),(pos2.shape[0])))
-        # Copy channel and generate noise
+        # Copy channel
         self.ch20=copy.deepcopy(self.ch2)
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image() 
@@ -127,19 +127,7 @@ class dataset_simulation(dataset):
     
     
     def relink_dataset(self):
-        self.linked=True 
-        N=int(np.min((self.ch1.pos.shape[0],self.ch2.pos.shape[0]))/(1+self.noise))
-        frame1=self.ch1.frame.numpy()
-        frame2=self.ch2.frame.numpy()
-        frame20=self.ch20.frame.numpy()
-        pos1=self.ch1.pos.numpy()
-        pos2=self.ch2.pos.numpy()
-        pos20=self.ch20.pos.numpy()
-        del self.ch1, self.ch2, self.ch20
-        self.ch1 = Channel( pos1[:N,:] , frame1[:N] )
-        self.ch2 = Channel( pos2[:N,:] , frame2[:N] )
-        self.ch20 = Channel( pos20[:N,:] , frame20[:N] )
-            
+        self.linked=True            
          
             
 #%% Dataset copy
@@ -215,19 +203,7 @@ class dataset_copy(dataset):
     
     
     def relink_dataset(self):
-        self.linked=True 
-        N=int(np.min((self.ch1.pos.shape[0],self.ch2.pos.shape[0]))/(1+self.noise))
-        frame1=self.ch1.frame.numpy()
-        frame2=self.ch2.frame.numpy()
-        frame20=self.ch20.frame.numpy()
-        pos1=self.ch1.pos.numpy()
-        pos2=self.ch2.pos.numpy()
-        pos20=self.ch20.pos.numpy()
-        del self.ch1, self.ch2, self.ch20
-        self.ch1 = Channel( pos1[:N,:] , frame1[:N] )
-        self.ch2 = Channel( pos2[:N,:] , frame2[:N] )
-        self.ch20 = Channel( pos20[:N,:] , frame20[:N] )
-        
+        self.linked=True        
         
             
 #%% Deform class

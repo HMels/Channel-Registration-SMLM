@@ -136,7 +136,7 @@ class Plot:
         plt.tight_layout()
         
         
-    def ErrorDistribution_xy(self, nbins=30, xlim=31):
+    def ErrorDistribution_xy(self, nbins=30, xlim=31, error=None):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
@@ -149,21 +149,30 @@ class Plot:
         
          ## fit bar plot data using curve_fit
         def func(r, mu, sigma):
-            return np.exp(-(r - mu) ** 2 / (2 * sigma ** 2))
+            return np.exp(-(r - mu) ** 2 / (2 * sigma ** 2)) / (np.sqrt(2*np.pi)*sigma)
         
         Nx = pos1.shape[0] * ( nx[1][1]-nx[1][0] )
         Ny = pos1.shape[0] * ( ny[1][1]-ny[1][0] )
         xn=(nx[1][:-1]+nx[1][1:])/2
         yn=(ny[1][:-1]+ny[1][1:])/2
-        poptx, pcovx = curve_fit(func, xn, nx[0]/Nx)
-        popty, pcovy = curve_fit(func, yn, ny[0]/Ny)
-        x = np.linspace(0, xlim, 1000)
+        poptx, pcovx = curve_fit(func, xn, nx[0]/Nx, p0=[np.average(distx), np.std(distx)])
+        popty, pcovy = curve_fit(func, yn, ny[0]/Ny, p0=[np.average(disty), np.std(disty)])
+        x = np.linspace(-xlim, xlim, 1000)
         yx = func(x, *poptx)*Nx
         yy = func(x, *popty)*Ny
-        plt.plot(x, yx, c='g',label=(r'fit: $\mu$='+str(round(poptx[0],2))+'$\sigma$='+str(round(poptx[0],2))+'[nm]'))
-        plt.plot(x, yy, c='g',label=(r'fit: $\mu$='+str(round(popty[0],2))+'$\sigma$='+str(round(popty[0],2))+'[nm]'))
+        ax[0].plot(x, yx, c='g',label=(r'fit: $\mu$='+str(round(poptx[0],2))+', $\sigma$='+str(round(poptx[1],2))+'[nm]'))
+        ax[1].plot(x, yy, c='g',label=(r'fit: $\mu$='+str(round(popty[0],2))+', $\sigma$='+str(round(popty[1],2))+'[nm]'))
+        ymax = np.max([np.max(nx[0]),np.max(ny[0]), np.max(yx), np.max(yy)])*1.1
         
-        ymax = np.max([np.max(nx[0]),np.max(ny[0])])*1.1
+        ## plot how function should look like
+        if error is not None:
+            sgm=np.sqrt(2)*error
+            opt_yx = func(x, 0, sgm)*Nx
+            opt_yy = func(x, 0, sgm)*Ny
+            ax[0].plot(x, opt_yx, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
+            ax[1].plot(x, opt_yy, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
+            if np.max([np.max(opt_yx),np.max(opt_yy)])>ymax: ymax=np.max([np.max(opt_yx),np.max(opt_yy)])*1.1
+
         ax[0].set_ylim([0,ymax])
         ax[0].set_xlim(-xlim,xlim)
         ax[0].set_xlabel('x-error [nm]')
@@ -421,64 +430,65 @@ class Plot:
         None.
     
         '''
-        print('Plotting the Spline Grid...')
-        if ch1 is None:
-            ch1=self.ch1.pos
-            ch2=self.ch2.pos
-            ch20=self.ch20.pos
-        
-        ## The original points
-        ch1 = tf.Variable( tf.stack([
-            (ch1[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch1[:,1] - np.min(ch20[:,1])) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch2 = tf.Variable( tf.stack([
-            (ch2[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch2[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch20 = tf.Variable( tf.stack([
-            (ch20[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-            (ch20[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        
-        # plotting the localizations
-        plt.figure()
-        plt.scatter(ch2[:,0],ch2[:,1], c='red', marker='.', s=locs_markersize, label='Mapped CH2')
-        plt.scatter(ch20[:,0],ch20[:,1], c='orange', marker='.', 
-                    alpha=.7, s=locs_markersize-2, label='Original CH2')
-        plt.scatter(ch1[:,0],ch1[:,1], c='green', marker='.', s=locs_markersize, label='Original CH1')
-               
-        
-        ## Horizontal Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid*2)
-        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-        
-        ## Vertical Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid*2)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-        
-        Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-        plt.scatter(Grid[:,0], Grid[:,1], c='c', marker='.', s=grid_markersize, alpha=grid_opacity)
-        
-        
-        ## Controlpoints Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
-        GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-        
-        ## Vertical Grid
-        x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
-        x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-        GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-        
-        Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-        plt.scatter(Grid[:,0], Grid[:,1], c='b', marker='.', s=grid_markersize, alpha=grid_opacity)
-        
-        # plotting the ControlPoints
-        plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
-                    c='b', marker='o', s=CP_markersize, label='ControlPoints')
-        
-        plt.legend()
-        plt.tight_layout()
+        if self.SplinesModel is not None:
+            print('Plotting the Spline Grid...')
+            if ch1 is None:
+                ch1=self.ch1.pos
+                ch2=self.ch2.pos
+                ch20=self.ch20.pos
+            
+            ## The original points
+            ch1 = tf.Variable( tf.stack([
+                (ch1[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+                (ch1[:,1] - np.min(ch20[:,1])) + self.edge_grids*self.gridsize
+                ], axis=-1), dtype=tf.float32, trainable=False)
+            ch2 = tf.Variable( tf.stack([
+                (ch2[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+                (ch2[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
+                ], axis=-1), dtype=tf.float32, trainable=False)
+            ch20 = tf.Variable( tf.stack([
+                (ch20[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
+                (ch20[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
+                ], axis=-1), dtype=tf.float32, trainable=False)
+            
+            # plotting the localizations
+            plt.figure()
+            plt.scatter(ch2[:,0],ch2[:,1], c='red', marker='.', s=locs_markersize, label='Mapped CH2')
+            plt.scatter(ch20[:,0],ch20[:,1], c='orange', marker='.', 
+                        alpha=.7, s=locs_markersize-2, label='Original CH2')
+            plt.scatter(ch1[:,0],ch1[:,1], c='green', marker='.', s=locs_markersize, label='Original CH1')
+                   
+            
+            ## Horizontal Grid
+            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
+            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid*2)
+            GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
+            
+            ## Vertical Grid
+            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid*2)
+            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
+            GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
+            
+            Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
+            plt.scatter(Grid[:,0], Grid[:,1], c='c', marker='.', s=grid_markersize, alpha=grid_opacity)
+            
+            
+            ## Controlpoints Grid
+            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
+            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
+            GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
+            
+            ## Vertical Grid
+            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
+            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
+            GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
+            
+            Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
+            plt.scatter(Grid[:,0], Grid[:,1], c='b', marker='.', s=grid_markersize, alpha=grid_opacity)
+            
+            # plotting the ControlPoints
+            plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
+                        c='b', marker='o', s=CP_markersize, label='ControlPoints')
+            
+            plt.legend()
+            plt.tight_layout()

@@ -127,14 +127,14 @@ class Registration(Plot):
     def Train_Shift(self, lr=100, epochs=100, opt_fn=tf.optimizers.Adagrad):
     # Training the RigidBody Mapping
         if self.ShiftModel is not None: raise Exception('Models can only be trained once')
-        
-        # initializing the model and optimizer
-        self.ShiftModel=ShiftModel()
-        opt=opt_fn(lr)
-        
-        # Training the Model
-        print('Training Shift Mapping (lr,#it)='+str((lr,epochs))+'...')
-        _ = self.train_model(self.ShiftModel, epochs, opt)
+        if epochs!=0 and epochs is not None:
+            # initializing the model and optimizer
+            self.ShiftModel=ShiftModel()
+            opt=opt_fn(lr)
+            
+            # Training the Model
+            print('Training Shift Mapping (lr,#it)='+str((lr,epochs))+'...')
+            _ = self.train_model(self.ShiftModel, epochs, opt)
 
 
     def Transform_Shift(self):
@@ -153,22 +153,23 @@ class Registration(Plot):
     def Train_RigidBody(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the RigidBody Mapping
         if self.RigidBodyModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
-            print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        
-        # initializing the model and optimizer
-        self.RigidBodyModel=RigidBodyModel()
-        opt1=opt_fn(lr)
-        
-        # Training the Model
-        print('Training RigidBody Mapping (lr,#it)='+str((lr,epochs))+'...')
-        _ = self.train_model(self.RigidBodyModel, epochs, opt1)
-        
-        ## then train the d vector (shift)
-        self.RigidBodyModel.d._trainable=True
-        self.RigidBodyModel.cos._trainable=False
-        opt2=opt_fn(lr)
-        _ = self.train_model(self.RigidBodyModel, epochs, opt2)
+        if epochs!=0 and epochs is not None:
+            if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
+                print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            
+            # initializing the model and optimizer
+            self.RigidBodyModel=RigidBodyModel()
+            opt1=opt_fn(lr)
+            
+            # Training the Model
+            print('Training RigidBody Mapping (lr,#it)='+str((lr,epochs))+'...')
+            _ = self.train_model(self.RigidBodyModel, epochs, opt1)
+            
+            ## then train the d vector (shift)
+            self.RigidBodyModel.d._trainable=True
+            self.RigidBodyModel.cos._trainable=False
+            opt2=opt_fn(lr)
+            _ = self.train_model(self.RigidBodyModel, epochs, opt2)
 
     
     def Transform_RigidBody(self):
@@ -189,24 +190,25 @@ class Registration(Plot):
     def Train_Affine(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the Affine Mapping
         if self.AffineModel is not None: raise Exception('Models can only be trained once')
-        if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
-            print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
-        
-        # initializing the model and optimizer
-        self.AffineModel=AffineModel()
-        
-        # Training the Model
-        print('Training Affine Mapping with (lr,#it)='+str((lr,epochs))+'...')
-        # first train the A matrix (rot, shear, scaling)
-        opt1=opt_fn(lr)
-        _ = self.train_model(self.AffineModel, epochs, opt1)
-        
-        
-        ## then train the d vector (shift)
-        self.AffineModel.d._trainable=True
-        self.AffineModel.A._trainable=False
-        opt2=opt_fn(lr)
-        _ = self.train_model(self.AffineModel, epochs, opt2)
+        if epochs!=0 and epochs is not None:
+            if tf.math.count_nonzero(tf.round(self.mid,0))!=0: 
+                print('WARNING! The image is not centered. This may have have detrimental effects for mapping a rotation!')
+            
+            # initializing the model and optimizer
+            self.AffineModel=AffineModel()
+            
+            # Training the Model
+            print('Training Affine Mapping with (lr,#it)='+str((lr,epochs))+'...')
+            # first train the A matrix (rot, shear, scaling)
+            opt1=opt_fn(lr)
+            _ = self.train_model(self.AffineModel, epochs, opt1)
+            
+            
+            ## then train the d vector (shift)
+            self.AffineModel.d._trainable=True
+            self.AffineModel.A._trainable=False
+            opt2=opt_fn(lr)
+            _ = self.train_model(self.AffineModel, epochs, opt2)
         
         
     
@@ -228,14 +230,14 @@ class Registration(Plot):
     def Train_Polynomial3(self, lr=1, epochs=200, opt_fn=tf.optimizers.Adagrad):
     # Training the Polynomial3 Mapping
         if self.Polynomial3Model is not None: raise Exception('Models can only be trained once')
-        
-        # initializing the model and optimizer
-        self.Polynomial3Model=Polynomial3Model()
-        opt=opt_fn(lr)
-        
-        # Training the Model
-        print('Training Polynomial3Model Mapping with (lr,#it)='+str((lr,epochs))+'...')
-        _ = self.train_model(self.Polynomial3Model, epochs, opt)
+        if epochs!=0 and epochs is not None:        
+            # initializing the model and optimizer
+            self.Polynomial3Model=Polynomial3Model()
+            opt=opt_fn(lr)
+            
+            # Training the Model
+            print('Training Polynomial3Model Mapping with (lr,#it)='+str((lr,epochs))+'...')
+            _ = self.train_model(self.Polynomial3Model, epochs, opt)
         
     
     def Transform_Polynomial3(self):
@@ -255,57 +257,57 @@ class Registration(Plot):
     # Training the Splines Mapping. lr is the learningrate, epochs the number of iterations
     # gridsize the size of the Spline grids and edge_grids the number of gridpoints extra at the edge
         if self.SplinesModel is not None: raise Exception('Models can only be trained once')
-        
-        ## Generate the borders of the system
-        (x1_min, x2_min, x1_max, x2_max) = ([],[],[],[])
-        x1_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,0])) )
-        x2_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,1])) )
-        x1_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,0])) )
-        x2_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,1])) )
-        self.x1_min = np.min(x1_min) / gridsize
-        self.x2_min = np.min(x2_min) / gridsize
-        self.x1_max = np.max(x1_max) / gridsize
-        self.x2_max = np.max(x2_max) / gridsize
-                                
-        ## Create grid
-        self.edge_grids = edge_grids
-        self.gridsize=gridsize
-        x1_grid = tf.range(0, self.x1_max - self.x1_min + self.edge_grids + 2, dtype=tf.float32)
-        x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
-        self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
-        
-        ## Create Nearest Neighbours
-        if self.linked:
-            ## Create variables normalized by gridsize
-            ch1_input = Channel( tf.Variable( tf.stack([
-                self.ch1.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch1.pos[:,1] / gridsize - self.x2_min + self.edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False), self.ch1.frame )
-            ch2_input = Channel( tf.Variable( tf.stack([
-                self.ch2.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch2.pos[:,1] / gridsize - self.x2_min + self.edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False), self.ch2.frame )
-        elif self.Neighbours:
-            ## Create variables normalized by gridsize
-            ch1_input = Channel( tf.Variable( tf.stack([
-                self.ch1NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch1NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False), self.ch1NN.frame )
-            ch2_input = Channel( tf.Variable( tf.stack([
-                self.ch2NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
-                self.ch2NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
-                ], axis=-1), dtype=tf.float32, trainable=False), self.ch2NN.frame )
-        else: 
-            raise Exception('Trying to calculate loss without Dataset being linked or Neighbours being generated!')
+        if epochs is not None:
+            ## Generate the borders of the system
+            (x1_min, x2_min, x1_max, x2_max) = ([],[],[],[])
+            x1_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,0])) )
+            x2_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,1])) )
+            x1_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,0])) )
+            x2_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,1])) )
+            self.x1_min = np.min(x1_min) / gridsize
+            self.x2_min = np.min(x2_min) / gridsize
+            self.x1_max = np.max(x1_max) / gridsize
+            self.x2_max = np.max(x2_max) / gridsize
+                                    
+            ## Create grid
+            self.edge_grids = edge_grids
+            self.gridsize=gridsize
+            x1_grid = tf.range(0, self.x1_max - self.x1_min + self.edge_grids + 2, dtype=tf.float32)
+            x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
+            self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
             
-        ## initializing optimizer
-        opt=opt_fn(lr)
-        self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
-        
-        ## Training the Model
-        print('Training Splines Mapping (lr,#it,gridsize)='+str((lr,epochs,gridsize))+'...')
-        _ = self.train_model(self.SplinesModel, epochs, opt, ch1_input, ch2_input)
-        self.ControlPoints = self.SplinesModel.ControlPoints
+            ## Create Nearest Neighbours
+            if self.linked:
+                ## Create variables normalized by gridsize
+                ch1_input = Channel( tf.Variable( tf.stack([
+                    self.ch1.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                    self.ch1.pos[:,1] / gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False), self.ch1.frame )
+                ch2_input = Channel( tf.Variable( tf.stack([
+                    self.ch2.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                    self.ch2.pos[:,1] / gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False), self.ch2.frame )
+            elif self.Neighbours:
+                ## Create variables normalized by gridsize
+                ch1_input = Channel( tf.Variable( tf.stack([
+                    self.ch1NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                    self.ch1NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False), self.ch1NN.frame )
+                ch2_input = Channel( tf.Variable( tf.stack([
+                    self.ch2NN.pos[:,0] / gridsize - self.x1_min + self.edge_grids,
+                    self.ch2NN.pos[:,1] / gridsize - self.x2_min + self.edge_grids
+                    ], axis=-1), dtype=tf.float32, trainable=False), self.ch2NN.frame )
+            else: 
+                raise Exception('Trying to calculate loss without Dataset being linked or Neighbours being generated!')
+                
+            ## initializing optimizer
+            opt=opt_fn(lr)
+            self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
+            
+            ## Training the Model
+            print('Training Splines Mapping (lr,#it,gridsize)='+str((lr,epochs,gridsize))+'...')
+            _ = self.train_model(self.SplinesModel, epochs, opt, ch1_input, ch2_input)
+            self.ControlPoints = self.SplinesModel.ControlPoints
                 
     
     def Transform_Splines(self):
