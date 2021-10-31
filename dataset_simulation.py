@@ -23,10 +23,27 @@ class dataset_simulation(dataset):
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
         dataset.__init__(self, path=None,pix_size=pix_size,linked=linked,imgshape=imgshape,
-                         FrameLinking=FrameLinking,FrameOptimization=FrameOptimization)
+                         FrameLinking=FrameLinking, loc_error=loc_error, FrameOptimization=FrameOptimization)
         
         
     #%% generate functions
+    def generate_dataset_grid(self, N=216, deform=None):
+        x = np.linspace(-self.imgshape[0]/2*self.pix_size, self.imgshape[0]/2*self.pix_size, int(np.sqrt(N)))
+        y = np.linspace(-self.imgshape[1]/2*self.pix_size, self.imgshape[1]/2*self.pix_size, int(np.sqrt(N)))
+        pos1=np.reshape(np.stack(np.meshgrid(x,y), axis=2),[-1,2])
+        pos2=copy.copy(pos1)
+        pos1=self.generate_locerror(pos1, self.loc_error) # Generate localization error
+        pos2=self.generate_locerror(pos2, self.loc_error)
+        if deform is not None: pos2=deform.deform(pos2) # deform  channel
+        # load into channels
+        self.ch1 = Channel(pos=pos1, frame=np.ones(pos1.shape[0]))
+        self.ch2 = Channel(pos=pos2, frame=np.ones(pos2.shape[0]))
+        # Copy channel
+        self.ch20=copy.deepcopy(self.ch2)
+        self.img, self.imgsize, self.mid = self.imgparams() 
+        self.center_image()
+        
+        
     def generate_dataset_beads(self, N=216, deform=None):
         pos1=np.array(self.imgshape*rnd.rand(N,2)*self.pix_size, dtype=np.float32) # generate channel positions
         pos2=copy.copy(pos1)

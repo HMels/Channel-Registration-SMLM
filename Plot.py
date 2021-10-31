@@ -186,6 +186,8 @@ class Plot:
         ax[1].legend()
         fig.tight_layout()
         
+        return poptx, popty
+        
         
     def ErrorDistribution_r(self, nbins=30, xlim=31, error=None):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
@@ -197,7 +199,7 @@ class Plot:
         
         # plotting the histogram
         plt.figure()
-        n=plt.hist(dist, label='data', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        n=plt.hist(dist, label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         #plt.axvline(x=avg, label='average='+str(round(avg,2))+'[nm]')
         ymax = np.max(n[0])*1.1
         
@@ -205,9 +207,6 @@ class Plot:
         ## fit bar plot data using curve_fit
         def func(r, sigma):
             # from Churchman et al 2006
-            '''
-            I think A needs to be pos1.shape[0]*bin_width
-            '''
             sigma2=sigma**2
             return r/sigma2*np.exp(-r**2/2/sigma2)
             #return A*(r/sigma2)/(2*np.pi)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
@@ -233,6 +232,7 @@ class Plot:
         plt.ylabel('# of localizations')
         plt.legend()
         plt.tight_layout()
+        return popt
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
@@ -401,8 +401,8 @@ class Plot:
         
         
     #%% Plotting the Grid
-    def plot_SplineGrid(self, ch1=None, ch2=None, ch20=None, locs_markersize=10,
-                        CP_markersize=8, d_grid=.1, grid_markersize=3, grid_opacity=1): 
+    def PlotSplineGrid(self, gridsize=None, edge_grids=None, ch1=None, ch2=None, ch20=None, locs_markersize=25,
+                        CP_markersize=20, d_grid=.1, Ngrids=4, plotarrows=True, plotmap=False): 
         '''
         Plots the grid and the shape of the grid in between the Control Points
     
@@ -420,75 +420,192 @@ class Plot:
             The size of the markers of the localizations. The default is 10.
         CP_markersize : float, optional
             The size of the markers of the Controlpoints. The default is 8.
-        grid_markersize : float, optional
-            The size of the markers of the grid. The default is 3.
-        grid_opacity : float, optional
-            The opacity of the grid. The default is 1.
-    
+            
         Returns
         -------
         None.
     
         '''
-        if self.SplinesModel is not None:
-            print('Plotting the Spline Grid...')
+        print('Plotting the Spline Grid...')
+        if ch1 is None:
+            ch1=self.ch1.pos
+            ch2=self.ch2.pos
+            ch20=self.ch20.pos
+        if gridsize is None: gridsize=self.gridsize
+        if edge_grids is None: edge_grids=self.edge_grids
+        if self.SplinesModel is None:
+            x1_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,0]))),
+                                  np.min(tf.reduce_min(tf.floor(ch2[:,0])))])/gridsize
+            x2_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,1]))),
+                                  np.min(tf.reduce_min(tf.floor(ch2[:,1])))])/gridsize
+            x1_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,0]))),
+                                  np.max(tf.reduce_max(tf.floor(ch2[:,0])))])/gridsize
+            x2_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,1]))),
+                                  np.max(tf.reduce_max(tf.floor(ch2[:,1])))])/gridsize
+            x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, dtype=tf.float32)
+            x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, dtype=tf.float32)
+            ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
+        else:
+            x1_min = self.x1_min
+            x2_min = self.x2_min
+            x1_max = self.x1_max
+            x2_max = self.x2_max
+            ControlPoints = self.ControlPoints
+        
+        ## The original points
+        ch1 = tf.Variable( tf.stack([
+            (ch1[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
+            (ch1[:,1] - np.min(ch20[:,1])) + edge_grids*gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        ch2 = tf.Variable( tf.stack([
+            (ch2[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
+            (ch2[:,1] - np.min(ch20[:,1]) ) + edge_grids*gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        ch20 = tf.Variable( tf.stack([
+            (ch20[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
+            (ch20[:,1] - np.min(ch20[:,1]) ) + edge_grids*gridsize
+            ], axis=-1), dtype=tf.float32, trainable=False)
+        
+        # plotting the localizations
+        plt.figure()
+        plt.scatter(ch20[:,0],ch20[:,1], c='green', marker='.', s=locs_markersize, label='Original')
+        plt.scatter(ch1[:,0],ch1[:,1], c='red', marker='.', s=locs_markersize, label='Target')
+        if plotarrows:
+            for i in range(ch1.shape[0]):
+                plt.arrow(ch20[i,0],ch20[i,1], ch2[i,0]-ch20[i,0], ch2[i,1]-ch20[i,1], width=.02, 
+                          length_includes_head=True, facecolor='red', edgecolor='red')
+        if plotmap: 
+            plt.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
+        
+        # plotting the ControlPoints
+        plt.scatter(ControlPoints[:,:,0]*gridsize, ControlPoints[:,:,1]*gridsize,
+                    c='b', marker='d', s=CP_markersize, label='ControlPoints')
+        
+        ## Horizontal Grid
+        x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, delta=d_grid, dtype=tf.float32)
+        x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, delta=1/Ngrids, dtype=tf.float32)
+        Grid = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2)) 
+        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * gridsize
+        else: Grid = Grid*gridsize
+        (nn, i,j)=(x1_grid.shape[0],0,0)
+        while i<Grid.shape[0]:
+            if j%Ngrids==0:
+                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+            else:
+                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+            i+=nn
+            j+=1
+
+        ## Vertical Grid
+        x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, delta=1/Ngrids, dtype=tf.float32)
+        x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, delta=d_grid, dtype=tf.float32)
+        Grid = tf.gather(tf.reshape(tf.stack(tf.meshgrid(x2_grid, x1_grid), axis=-1) , (-1,2)), [1,0], axis=1)
+        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * gridsize
+        else: Grid = Grid*gridsize
+        (nn, i,j)=(x2_grid.shape[0],0,0)
+        while i<Grid.shape[0]:
+            if j%Ngrids==0:
+                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+            else:
+                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+            i+=nn
+            j+=1
+        
+        plt.legend()
+        plt.tight_layout()
+            
+
+    def PlotGridMapping(self, model, gridsize, edge_grids=None, ch1=None, ch2=None, ch20=None, 
+                            locs_markersize=25, CP_markersize=25, d_grid=.1, Ngrids=4, plotarrows=True, plotmap=False): 
+            '''
+            Plots the grid and the shape of the grid in between the Control Points
+        
+            Parameters
+            ----------
+            ch1 , ch2 , ch20 : Nx2 tf.float32 tensor
+                The tensor containing the localizations.
+            d_grid : float, optional
+                The precission of the grid we want to plot in between the
+                ControlPoints. The default is .1.
+            lines_per_CP : int, optional
+                The number of lines we want to plot in between the grids. 
+                Works best if even. The default is 1.
+            locs_markersize : float, optional
+                The size of the markers of the localizations. The default is 10.
+            CP_markersize : float, optional
+                The size of the markers of the Controlpoints. The default is 8.
+                
+            Returns
+            -------
+            None.
+        
+            '''
+            print('Plotting the Mapping Grid...')
             if ch1 is None:
+                self.center_image()
                 ch1=self.ch1.pos
                 ch2=self.ch2.pos
                 ch20=self.ch20.pos
+            if edge_grids is None: edge_grids=self.edge_grid
             
-            ## The original points
-            ch1 = tf.Variable( tf.stack([
-                (ch1[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-                (ch1[:,1] - np.min(ch20[:,1])) + self.edge_grids*self.gridsize
-                ], axis=-1), dtype=tf.float32, trainable=False)
-            ch2 = tf.Variable( tf.stack([
-                (ch2[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-                (ch2[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
-                ], axis=-1), dtype=tf.float32, trainable=False)
-            ch20 = tf.Variable( tf.stack([
-                (ch20[:,0] - np.min(ch20[:,0]) ) + self.edge_grids*self.gridsize,
-                (ch20[:,1] - np.min(ch20[:,1]) ) + self.edge_grids*self.gridsize
-                ], axis=-1), dtype=tf.float32, trainable=False)
+            x1_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,0]))),
+                                  np.min(tf.reduce_min(tf.floor(ch2[:,0])))])/gridsize
+            x2_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,1]))),
+                                  np.min(tf.reduce_min(tf.floor(ch2[:,1])))])/gridsize
+            x1_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,0]))),
+                                  np.max(tf.reduce_max(tf.floor(ch2[:,0])))])/gridsize
+            x2_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,1]))),
+                                  np.max(tf.reduce_max(tf.floor(ch2[:,1])))])/gridsize
+        
+            x1_grid = tf.range(x1_min-edge_grids, x1_max+edge_grids+1, dtype=tf.float32)
+            x2_grid = tf.range(x2_min-edge_grids, x2_max+edge_grids+1, dtype=tf.float32)
+            if model is not None: ControlPoints = model(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1))
+            else: ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
             
             # plotting the localizations
             plt.figure()
-            plt.scatter(ch2[:,0],ch2[:,1], c='red', marker='.', s=locs_markersize, label='Mapped CH2')
-            plt.scatter(ch20[:,0],ch20[:,1], c='orange', marker='.', 
-                        alpha=.7, s=locs_markersize-2, label='Original CH2')
-            plt.scatter(ch1[:,0],ch1[:,1], c='green', marker='.', s=locs_markersize, label='Original CH1')
-                   
-            
-            ## Horizontal Grid
-            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid*2)
-            GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-            
-            ## Vertical Grid
-            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid*2)
-            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-            GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-            
-            Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-            plt.scatter(Grid[:,0], Grid[:,1], c='c', marker='.', s=grid_markersize, alpha=grid_opacity)
-            
-            
-            ## Controlpoints Grid
-            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2, delta=d_grid)
-            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2)
-            GridH = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2))       
-            
-            ## Vertical Grid
-            x1_grid = tf.range(0, self.x1_max + self.edge_grids + 2)
-            x2_grid = tf.range(0, self.x2_max + self.edge_grids + 2, delta=d_grid)
-            GridV = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1), (-1,2))
-            
-            Grid = self.SplinesModel(tf.concat([GridH,GridV], axis=0) ) * self.gridsize
-            plt.scatter(Grid[:,0], Grid[:,1], c='b', marker='.', s=grid_markersize, alpha=grid_opacity)
+            plt.scatter(ch20[:,0],ch20[:,1], c='green', marker='.', s=locs_markersize, label='Original')
+            plt.scatter(ch1[:,0],ch1[:,1], c='red', marker='.', s=locs_markersize, label='Target')
+            if plotarrows:
+                for i in range(ch1.shape[0]):
+                    plt.arrow(ch20[i,0],ch20[i,1], ch2[i,0]-ch20[i,0], ch2[i,1]-ch20[i,1], width=.02, 
+                              length_includes_head=True, facecolor='red', edgecolor='red')
+            if plotmap: 
+                plt.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
             
             # plotting the ControlPoints
-            plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
-                        c='b', marker='o', s=CP_markersize, label='ControlPoints')
+            plt.scatter(ControlPoints[:,:,0]*gridsize, ControlPoints[:,:,1]*gridsize,
+                        c='b', marker='d', s=CP_markersize)
+            
+            ## Horizontal Grid
+            x1_grid = tf.range(x1_min-edge_grids, tf.math.ceil(x1_max)+edge_grids+d_grid, delta=d_grid, dtype=tf.float32)
+            x2_grid = tf.range(x2_min-edge_grids, tf.math.ceil(x2_max)+edge_grids+d_grid, delta=1/Ngrids, dtype=tf.float32)
+            Grid = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2)) 
+            if model is not None: Grid = model( Grid ) * gridsize
+            else: Grid = Grid*gridsize
+            (nn, i,j)=(x1_grid.shape[0],0,0)
+            while i<Grid.shape[0]:
+                if j%Ngrids==0:
+                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+                else:
+                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+                i+=nn
+                j+=1
+
+            ## Vertical Grid
+            x1_grid = tf.range(x1_min-edge_grids, tf.math.ceil(x1_max)+edge_grids+d_grid, delta=1/Ngrids, dtype=tf.float32)
+            x2_grid = tf.range(x2_min-edge_grids, tf.math.ceil(x2_max)+edge_grids+d_grid, delta=d_grid, dtype=tf.float32)
+            Grid = tf.gather(tf.reshape(tf.stack(tf.meshgrid(x2_grid, x1_grid), axis=-1) , (-1,2)), [1,0], axis=1)
+            if model is not None: Grid = model( Grid ) * gridsize
+            else: Grid = Grid*gridsize
+            (nn, i,j)=(x2_grid.shape[0],0,0)
+            while i<Grid.shape[0]:
+                if j%Ngrids==0:
+                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+                else:
+                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+                i+=nn
+                j+=1
             
             plt.legend()
             plt.tight_layout()

@@ -25,7 +25,7 @@ class dataset(Registration):
         self.linked=linked        # is the data linked/paired?
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
-        self.subset=1
+        self.subset=1       
         Registration.__init__(self)
         
         

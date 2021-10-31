@@ -258,23 +258,9 @@ class Registration(Plot):
     # gridsize the size of the Spline grids and edge_grids the number of gridpoints extra at the edge
         if self.SplinesModel is not None: raise Exception('Models can only be trained once')
         if epochs is not None:
-            ## Generate the borders of the system
-            (x1_min, x2_min, x1_max, x2_max) = ([],[],[],[])
-            x1_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,0])) )
-            x2_min.append( tf.reduce_min(tf.floor(self.ch2.pos[:,1])) )
-            x1_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,0])) )
-            x2_max.append( tf.reduce_max(tf.floor(self.ch2.pos[:,1])) )
-            self.x1_min = np.min(x1_min) / gridsize
-            self.x2_min = np.min(x2_min) / gridsize
-            self.x1_max = np.max(x1_max) / gridsize
-            self.x2_max = np.max(x2_max) / gridsize
-                                    
-            ## Create grid
+            self.ControlPoints=self.generate_CPgrid(gridsize, edge_grids)
             self.edge_grids = edge_grids
             self.gridsize=gridsize
-            x1_grid = tf.range(0, self.x1_max - self.x1_min + self.edge_grids + 2, dtype=tf.float32)
-            x2_grid = tf.range(0, self.x2_max - self.x2_min + self.edge_grids + 2, dtype=tf.float32)
-            self.ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
             
             ## Create Nearest Neighbours
             if self.linked:
@@ -344,4 +330,22 @@ class Registration(Plot):
                     (pos1NN_mapped[:,0] + self.x1_min - self.edge_grids) * self.gridsize,
                     (pos1NN_mapped[:,1] + self.x2_min - self.edge_grids) * self.gridsize          
                     ], axis=-1))
+            
+
+    def generate_CPgrid(self, gridsize=3000, edge_grids=1):
+            ## Generate the borders of the system
+            self.x1_min = np.min([np.min(tf.reduce_min(tf.floor(self.ch1.pos[:,0]))),
+                                  np.min(tf.reduce_min(tf.floor(self.ch2.pos[:,0])))])/gridsize
+            self.x2_min = np.min([np.min(tf.reduce_min(tf.floor(self.ch1.pos[:,1]))),
+                                  np.min(tf.reduce_min(tf.floor(self.ch2.pos[:,1])))])/gridsize
+            self.x1_max = np.max([np.max(tf.reduce_max(tf.floor(self.ch1.pos[:,0]))),
+                                  np.max(tf.reduce_max(tf.floor(self.ch2.pos[:,0])))])/gridsize
+            self.x2_max = np.max([np.max(tf.reduce_max(tf.floor(self.ch1.pos[:,1]))),
+                                  np.max(tf.reduce_max(tf.floor(self.ch2.pos[:,1])))])/gridsize        
+        
+            ## Create grid
+            x1_grid = tf.range(0, self.x1_max - self.x1_min + 2*edge_grids + 1, dtype=tf.float32)
+            x2_grid = tf.range(0, self.x2_max - self.x2_min + 2*edge_grids + 1, dtype=tf.float32)
+            ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
+            return ControlPoints
             

@@ -45,24 +45,25 @@ if False: #% Load Clusters
     gridsize=1000
     
 
-if False: #% Load Excel Niekamp
+if True: #% Load Excel Niekamp
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                   linked=False, pix_size=1, loc_error=1.4, FrameLinking=True, FrameOptimization=False)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                   linked=False, pix_size=1, loc_error=1.4, FrameLinking=True)
     DS1.load_dataset_excel()
     DS2.load_dataset_excel()
+    DS1.pix_size=159
     DS1.link_dataset()
     DS2.link_dataset()
     
     ## optimization params
     learning_rates = [1000, .1, 1e-3]
-    epochs = [100, 500, 1000]
+    epochs = [200, 200, 200]
     pair_filter = [250, 30]
     gridsize=3000
 
 
-if True: #% copy clusters
+if False: #% copy clusters
     DS1 = dataset_copy('C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5',
                   linked=False, pix_size=159, loc_error=10, FrameLinking=False, FrameOptimization=True)
     deform=Affine_Deform()
@@ -113,19 +114,19 @@ if False: #% generate dataset clusters
     
     
 #%% Shift Transform
-DS1.Train_Shift(lr=learning_rates[0], epochs=epochs[0])
+DS1.Train_Shift(lr=learning_rates[0], epochs=epochs[0], opt_fn=tf.optimizers.Adagrad)
 DS1.Transform_Shift()
 
 #%% Affine Transform
 DS1.Filter(pair_filter[0])
 DS1.Train_Affine(lr=learning_rates[1], epochs=epochs[1], opt_fn=tf.optimizers.Adam)
 DS1.Transform_Affine()
+#DS1.PlotGridMapping(DS1.AffineModel, gridsize, edge_grids)
 
 #%% CatmullRomSplines
-DS1.SplinesModel=None
 DS1.Train_Splines(lr=learning_rates[2], epochs=epochs[2], gridsize=gridsize, edge_grids=1, opt_fn=tf.optimizers.SGD)
 DS1.Transform_Splines()
-#DS1.plot_SplineGrid()
+#DS1.PlotSplineGrid(gridsize=gridsize, edge_grids=edge_grids)
 DS1.Filter(pair_filter[1])
 print('Optimized in ',round((time.time()-start)/60,1),'minutes!')
 

@@ -23,8 +23,8 @@ class AffineModel(tf.keras.Model):
     '''
     def __init__(self, direct=False, name='Affine'):
         super().__init__(name=name)
-        self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
         self.A = tf.Variable([[1,0],[0,1]], dtype=tf.float32, trainable=True, name='A')
+        self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
         
 
     @tf.function 

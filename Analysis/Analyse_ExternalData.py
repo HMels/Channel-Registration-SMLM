@@ -10,6 +10,9 @@ import pandas as pd
 import matplotlib as mpl
 from scipy.optimize import curve_fit
 
+import sys
+sys.path.insert(0, 'C:/Users/Mels/OneDrive/MASTER_AP/MEP/24-channel-alignment')
+
        
 #%% functions
 def load_dataset(path):
@@ -102,7 +105,7 @@ def ErrorDistribution_r(pair, nbins=30, xlim=31, error=None):
     
     # plotting the histogram
     plt.figure()
-    n=plt.hist(dist, label='data', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+    n=plt.hist(dist, label='N='+str(distx.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
     #plt.axvline(x=avg, label='average='+str(round(avg,2))+'[nm]')
     ymax = np.max(n[0])*1.1
     
@@ -110,9 +113,6 @@ def ErrorDistribution_r(pair, nbins=30, xlim=31, error=None):
     ## fit bar plot data using curve_fit
     def func(r, sigma):
         # from Churchman et al 2006
-        '''
-        I think A needs to be pos1.shape[0]*bin_width
-        '''
         sigma2=sigma**2
         return r/sigma2*np.exp(-r**2/2/sigma2)
         #return A*(r/sigma2)/(2*np.pi)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
@@ -185,11 +185,11 @@ def ErrorPlotImage(pair, pair1, maxDist=30, ps=5, cmap='seismic'):
     
 #%% Loading Dataset
 
-fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs_NoLocal.csv')
-fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs_NoLocal.csv')
+#fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs_NoLocal.csv')
+#fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs_NoLocal.csv')
 
-#fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs.csv')
-#fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs.csv')
+fiducials1 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set1/set1_beads_locs.csv')
+fiducials2 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs.csv')
 
 
 #%% output
