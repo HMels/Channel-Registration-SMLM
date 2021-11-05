@@ -21,7 +21,7 @@ class AffineModel(tf.keras.Model):
         The relative entropy of the current mapping
         
     '''
-    def __init__(self, direct=False, name='Affine'):
+    def __init__(self, name='Affine'):
         super().__init__(name=name)
         self.A = tf.Variable([[1,0],[0,1]], dtype=tf.float32, trainable=True, name='A')
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')

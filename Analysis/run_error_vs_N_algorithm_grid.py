@@ -20,7 +20,6 @@ import time
 from Channel import Channel
 from Align_Modules.Splines import CatmullRomSpline2D
 
-
 plt.close('all')
 #%% Plotting
 def ErrorDist(popt, N, xlim=31, error=None):
@@ -41,7 +40,7 @@ def ErrorDist(popt, N, xlim=31, error=None):
         
     for n in range(len(N)):
         y = func(x, popt[n])
-        plt.plot(x, y, label=(r'fit: $\sigma$='+str(np.round(popt[n],2))+' for N='+str(100*round(N[n]/100))))
+        plt.plot(x, y, label=(r'fit: $\sigma$='+str(np.round(popt[n],2))+'[nm], for N='+str(100*round(N[n]/100))))
     
 
     # Some extra plotting parameters
@@ -57,7 +56,13 @@ def SplinesDeform(Dataset, gridsize=3000, edge_grids=1, error=10):
     Dataset.edge_grids=edge_grids
     Dataset.gridsize=gridsize
     ControlPoints=Dataset.generate_CPgrid(gridsize, edge_grids)
-    ControlPoints+=rnd.randn(ControlPoints.shape[0],ControlPoints.shape[1],ControlPoints.shape[2])*error/gridsize
+    
+    #ControlPoints+=rnd.randn(ControlPoints.shape[0],ControlPoints.shape[1],ControlPoints.shape[2])*error/gridsize
+    ControlPoints=ControlPoints.numpy()
+    ControlPoints[::2, ::2,:]+=error/gridsize
+    ControlPoints[1::2, 1::2,:]-=error/gridsize
+    ControlPoints=tf.Variable(ControlPoints, trainable=False, dtype=tf.float32)
+    
     Dataset.SplinesModel=CatmullRomSpline2D(ControlPoints)
     Dataset.Transform_Splines()
     Dataset.SplinesModel=None
@@ -70,13 +75,13 @@ def SplinesDeform(Dataset, gridsize=3000, edge_grids=1, error=10):
 ## optimization params
 learning_rates = [1000, .1, 1e-3]
 epochs = [100, 100, 100]
-pair_filter = [250, 50,  20]
+pair_filter = [None, None,  20]
 gridsize=3000
 
 
 DS2=None
-Nsim=3
-Ntimes = [1, 2, 5, 10, 20, 50, 100, 200] 
+Nsim=1
+Ntimes = [4, 16, 64, 256, 512] 
 sigma, N=(np.zeros([len(Ntimes), Nsim], dtype=np.float32), np.zeros([len(Ntimes), Nsim], dtype=np.float32))
 for i in range(len(Ntimes)):
     Ncopy=Ntimes[i]
@@ -84,9 +89,10 @@ for i in range(len(Ntimes)):
         DS1 = dataset_simulation(imgshape=[512, 512], loc_error=1.4, linked=True,
                                  pix_size=159, FrameLinking=False, FrameOptimization=False)
         deform=Affine_Deform()
-        DS1.generate_dataset_grid(N=7000*Ncopy, deform=deform)
-        DS1=SplinesDeform(DS1, gridsize=gridsize, error=30)
+        DS1.generate_dataset_grid(N=1000*Ncopy, deform=deform)
+        DS1=SplinesDeform(DS1, gridsize=1.5*gridsize, error=3)
         DS1, DS2 = DS1.SplitDataset(linked=True)
+        #DS1.ErrorPlotImage(DS2)
         
         DS1.ShiftModel=None
         DS1.Train_Shift(lr=learning_rates[0], epochs=epochs[0], opt_fn=tf.optimizers.Adagrad)

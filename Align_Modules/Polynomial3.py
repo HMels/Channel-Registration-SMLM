@@ -15,7 +15,7 @@ class Polynomial3Model(tf.keras.Model):
     - calculates the relative entropy via Rel_entropy()    
     '''
     
-    def __init__(self, direct=False, name = 'polynomial'): 
+    def __init__(self, name = 'Polynomial3'): 
         super().__init__(name=name)
         self.M1 = tf.Variable([[0.0, 0.0, 0.0],
                                [1.0, 0.0, 0.0],

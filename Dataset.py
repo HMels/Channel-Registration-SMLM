@@ -10,12 +10,12 @@ import tensorflow as tf
 import numpy as np
 from photonpy import PostProcessMethods, Context, Dataset
 
-from Channel import Channel        
-from Registration import Registration
+from Channel import Channel
+from Model import Model     
 
 
 #%% Dataset
-class dataset(Registration):
+class dataset(Model):
     def __init__(self, path, pix_size=1, loc_error=10, linked=False, imgshape=[512, 512], 
                  FrameLinking=True, FrameOptimization=False):
         self.path=path            # the string or list containing the strings of the file location of the dataset
@@ -23,10 +23,24 @@ class dataset(Registration):
         self.loc_error=loc_error  # localization error
         self.imgshape=imgshape    # number of pixels of the dataset
         self.linked=linked        # is the data linked/paired?
+        self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
         self.subset=1       
-        Registration.__init__(self)
+        Model.__init__(self)        
+        
+        
+    def reload_dataset(self):
+        # reloads the original channels of the dataset
+        self.linked=self.linked_original
+        del self.ch1, self.ch2, self.ch20linked
+        self.ch1=copy.deepcopy(self.ch10)
+        self.ch2=copy.deepcopy(self.ch20) 
+        self.ch20linked=copy.deepcopy(self.ch20) 
+        try: 
+            del self.ch1NN, self.ch2NN
+        except: pass
+        self.Neighbours=False
         
         
     #%% load_dataset
@@ -43,8 +57,10 @@ class dataset(Registration):
     
         self.ch1 = Channel(pos = data1[:,:2]* self.pix_size, frame = data1[:,2])
         self.ch2 = Channel(pos = data2[:,:2]* self.pix_size, frame = data2[:,2])
+        self.ch10=copy.deepcopy(self.ch1)
+        self.ch20=copy.deepcopy(self.ch2)
+        self.ch20linked=copy.deepcopy(self.ch2)
         
-        self.ch20=copy.deepcopy(self.ch2)          # original channel 2
         self.img, self.imgsize, self.mid = self.imgparams()      # loading the image parameters
         self.center_image()
     
@@ -76,8 +92,10 @@ class dataset(Registration):
         
         self.ch1 = Channel(pos = ch1.pos* self.pix_size, frame = ch1.frame)
         self.ch2 = Channel(pos = ch2.pos* self.pix_size, frame = ch2.frame)
-        
+        self.ch10=copy.deepcopy(self.ch1)
         self.ch20=copy.deepcopy(self.ch2)
+        self.ch20linked=copy.deepcopy(self.ch2)
+        
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
         
@@ -101,7 +119,9 @@ class dataset(Registration):
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.ch1.pos.assign(self.ch1.pos - self.mid[None,:])
         self.ch2.pos.assign(self.ch2.pos - self.mid[None,:])
+        self.ch10.pos.assign(self.ch10.pos - self.mid[None,:])
         self.ch20.pos.assign(self.ch20.pos - self.mid[None,:])
+        self.ch20linked.pos.assign(self.ch20linked.pos - self.mid[None,:])
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.mid = tf.Variable([0,0], dtype=tf.float32)
         
@@ -109,10 +129,49 @@ class dataset(Registration):
     def center_channels(self):
         self.ch1.center()
         self.ch2.center()
+        self.ch10.center()
         self.ch20.center()
+        self.ch20linked.center()
         
         
     #%% Split dataset or load subset
+    def AppendDataset(self, other):
+        self.ch1.AppendChannel(other.ch1)
+        if self.ch10 is not None and other.ch10 is not None: self.ch10.AppendChannel(other.ch10)
+        if self.ch2 is not None and other.ch2 is not None: self.ch2.AppendChannel(other.ch2)
+        if self.ch20 is not None and other.ch20 is not None: self.ch20.AppendChannel(other.ch20)
+        if self.ch20linked is not None and other.ch20linked is not None:
+            self.ch20linked.AppendChannel(other.ch20linked)
+        
+        
+    def Subset(self, subset_boundaries, linked=None):
+    # loading subset of dataset by creating a window of size subset 
+        if linked is None: linked=self.linked
+        print('Taking a subset of size of points within',subset_boundaries,'...')
+        
+        self.img, self.imgsize, self.mid = self.imgparams()
+        if subset_boundaries[0,0]>=subset_boundaries[1,0] or subset_boundaries[0,1]>=subset_boundaries[1,1]:
+            raise ValueError('Invalid input. Look at the subset boundaries')
+        if (subset_boundaries[0,0]<=self.img[0,0] or subset_boundaries[0,0]>=self.img[1,0] or 
+            subset_boundaries[0,1]<=self.img[0,1] or subset_boundaries[0,1]>=self.img[1,1] or
+            subset_boundaries[1,0]<=self.img[0,0] or subset_boundaries[1,0]>=self.img[1,0] or
+            subset_boundaries[1,1]<=self.img[0,1] or subset_boundaries[1,1]>=self.img[1,1]):
+            raise ValueError('Subset Boundaries out of bounds')
+            
+        idx1 = (np.where(self.ch1.pos.numpy()[:,0] >= subset_boundaries[0,0],True,False) * np.where(self.ch1.pos.numpy()[:,1] >= subset_boundaries[0,1],True,False)
+                            * np.where(self.ch1.pos.numpy()[:,0] <= subset_boundaries[1,0],True,False) * np.where(self.ch1.pos.numpy()[:,1] <= subset_boundaries[1,1],True,False) )
+        idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= subset_boundaries[0,0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= subset_boundaries[0,1],True,False)
+                            * np.where(self.ch2.pos.numpy()[:,0] <= subset_boundaries[1,0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= subset_boundaries[1,1],True,False) )
+        
+        if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
+        self.subset*=idx1.shape[0]/self.ch1.pos.shape[0]
+        if linked:
+            idx=idx1*idx2
+            return self.gather(np.argwhere(idx), np.argwhere(idx))
+        else:
+            return self.gather(np.argwhere(idx1), np.argwhere(idx2))
+        
+        
     def SubsetWindow(self, subset, linked=None):
     # loading subset of dataset by creating a window of size subset 
         if linked is None: linked=self.linked
@@ -127,12 +186,13 @@ class dataset(Registration):
         idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= l_grid[1],True,False)
                             * np.where(self.ch2.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= r_grid[1],True,False) )
         
+        if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
         self.subset*=subset
         if linked:
             idx=idx1*idx2
-            return self.gather( np.argwhere(idx), np.argwhere(idx))
+            return self.gather(np.argwhere(idx), np.argwhere(idx))
         else:
-            return self.gather( np.argwhere(idx1), np.argwhere(idx2))
+            return self.gather(np.argwhere(idx1), np.argwhere(idx2))
         
         
     def SubsetRandom(self, subset):
@@ -145,8 +205,28 @@ class dataset(Registration):
             mask2=self.random_choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
         self.subset*=subset
             
+        if len(mask1)==0 or len(mask2)==0: raise  ValueError('No values returned after subset')
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
         
+    
+    def SplitBatches(self, Nbatches):
+        self.Nbatches=Nbatches
+        if self.linked:
+            batches=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
+            self.ch1.frame.assign(batches)
+            self.ch2.frame.assign(batches)
+            self.ch20linked.frame.assign(batches)
+        else:
+            batches1=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
+            batches2=np.random.randint(0,Nbatches,self.ch2.frame.shape[0])
+            self.ch1.frame.assign(batches1)
+            self.ch2.frame.assign(batches2)
+            self.ch20linked.frame.assign(batches2)
+        if self.Neighbours:
+            batches=np.random.randint(0,Nbatches,self.ch1NN.frame.shape[0])
+            self.ch1NN.frame.assign(batches)
+            self.ch2NN.frame.assign(batches)
+            
         
     def SplitDataset(self, linked=None):
     # Splits dataset into 2 halves for cross validation)
@@ -182,70 +262,78 @@ class dataset(Registration):
     
     def gather(self, idx1, idx2):
     # gathers the indexes of both Channels
+        if len(idx1)==0 or len(idx2)==0: raise ValueError('Cannot gather a zeros sized array')
         other = copy.deepcopy(self)
-        del other.ch1, other.ch2, other.ch20
+        del other.ch1, other.ch2, other.ch20linked
         other.ch1 = Channel(pos=tf.gather_nd(self.ch1.pos,idx1), frame=tf.gather_nd(self.ch1.frame,idx1))
         other.ch2 = Channel(pos=tf.gather_nd(self.ch2.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2))
-        other.ch20 = Channel(pos=tf.gather_nd(self.ch20.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2))
+        other.ch10 = Channel(pos=tf.gather_nd(self.ch10.pos,idx1), frame=tf.gather_nd(self.ch10.frame,idx1))
+        other.ch20 = Channel(pos=tf.gather_nd(self.ch20.pos,idx2), frame=tf.gather_nd(self.ch20.frame,idx2))
+        other.ch20linked = Channel(pos=tf.gather_nd(self.ch20linked.pos,idx2), frame=tf.gather_nd(self.ch20linked.frame,idx2))
         return other
     
     
     #%% pair_functions
-    def link_dataset(self, maxDist=1000,FrameLinking=None):
-        print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
-        if FrameLinking is None: FrameLinking=self.FrameLinking
-        ch1_frame=self.ch1.frame.numpy()
-        ch2_frame=self.ch2.frame.numpy()
-        ch20_frame=self.ch20.frame.numpy()
-        ch1_pos=self.ch1.pos.numpy()
-        ch2_pos=self.ch2.pos.numpy()
-        ch20_pos=self.ch20.pos.numpy()
-        
-        (pos1, frame1, pos2, frame2, pos20, frame20) = ([],[],[],[],[],[])
-        if FrameLinking: ## Linking per frame
-            frame,_=tf.unique(self.ch1.frame)
-            for fr in frame:
-                # Generate neighbouring indices per frame
-                framepos1 = ch1_pos[ch1_frame==fr,:]
-                framepos2 = ch2_pos[ch2_frame==fr,:]
-                framepos20 = ch20_pos[ch20_frame==fr,:]
-                idxlist = self.FindNeighbours_idx(framepos1, framepos2, maxDist=maxDist)
+    def link_dataset(self, maxDist=None,FrameLinking=None):
+        if maxDist is None: maxDist=1000
+        try: #% linking datasets that are simulated works simpler
+            self.relink_dataset()
+        except:
+            print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
+            if self.linked: print('WARNING: Dataset already linked')
+            if FrameLinking is None: FrameLinking=self.FrameLinking
+            ch1_frame=self.ch1.frame.numpy()
+            ch2_frame=self.ch2.frame.numpy()
+            ch20_frame=self.ch20linked.frame.numpy()
+            ch1_pos=self.ch1.pos.numpy()
+            ch2_pos=self.ch2.pos.numpy()
+            ch20_pos=self.ch20linked.pos.numpy()
+            
+            (pos1, frame1, pos2, frame2, pos20, frame20) = ([],[],[],[],[],[])
+            if FrameLinking: ## Linking per frame
+                frame,_=tf.unique(self.ch1.frame)
+                for fr in frame:
+                    # Generate neighbouring indices per frame
+                    framepos1=ch1_pos[ch1_frame==fr,:]
+                    framepos2=ch2_pos[ch2_frame==fr,:]
+                    framepos20=ch20_pos[ch20_frame==fr,:]
+                    idxlist=self.FindNeighbours_idx(framepos1, framepos2, maxDist=maxDist)
+                    
+                    for idx in idxlist:
+                        if len(idx[0])!=0:
+                            posA=framepos1[idx[0][0],:]
+                            posB=framepos2[idx[1],:]
+                            posB0=framepos20[idx[1],:]
+                            frame1.append(fr)
+                            frame2.append(fr)
+                            frame20.append(fr)
+                            pos1.append(posA)
+                            pos2.append(posB[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+                            pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
                 
+            else: ## taking the whole dataset as a single batch
+                idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDist=maxDist)
                 for idx in idxlist:
                     if len(idx[0])!=0:
-                        posA=framepos1[idx[0][0],:]
-                        posB=framepos2[idx[1],:]
-                        posB0=framepos20[idx[1],:]
-                        frame1.append(fr)
-                        frame2.append(fr)
-                        frame20.append(fr)
-                        pos1.append(posA)
-                        pos2.append(posB[ np.argmin( np.sum((posA-posB)**2) ) ,:])
-                        pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+                        i=idx[0][0]
+                        posB=ch2_pos[idx[1],:]
+                        posB0=ch20_pos[idx[1],:]
+                        j=np.argmin( np.sum((ch1_pos[i,:]-posB)**2) )
+                        
+                        frame1.append(ch1_frame[i])
+                        frame2.append(ch2_frame[idx[1][j]])
+                        frame20.append(ch20_frame[idx[1][j]])
+                        pos1.append(ch1_pos[i,:])
+                        pos2.append(posB[j,:])
+                        pos20.append(posB0[j,:])
             
-        else: ## taking the whole dataset as a single batch
-            idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDist=maxDist)
-            for idx in idxlist:
-                if len(idx[0])!=0:
-                    i=idx[0][0]
-                    posB=ch2_pos[idx[1],:]
-                    posB0=ch20_pos[idx[1],:]
-                    j=np.argmin( np.sum((ch1_pos[i,:]-posB)**2) )
-                    
-                    frame1.append(ch1_frame[i])
-                    frame2.append(ch2_frame[idx[1][j]])
-                    frame20.append(ch20_frame[idx[1][j]])
-                    pos1.append(ch1_pos[i,:])
-                    pos2.append(posB[j,:])
-                    pos20.append(posB0[j,:])
-        
-        if len(pos1)==0 or len(pos2)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
-        
-        del self.ch1, self.ch2, self.ch20
-        self.ch1 = Channel( np.array(pos1) , np.array(frame1) )
-        self.ch2 = Channel( np.array(pos2) , np.array(frame2) )
-        self.ch20 = Channel( np.array(pos20) , np.array(frame20) )
-        self.linked = True
+            if len(pos1)==0 or len(pos2)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
+            
+            del self.ch1, self.ch2, self.ch20linked
+            self.ch1 = Channel( np.array(pos1) , np.array(frame1) )
+            self.ch2 = Channel( np.array(pos2) , np.array(frame2) )
+            self.ch20linked = Channel( np.array(pos20) , np.array(frame20) )
+            self.linked = True       
         
         
     #%% Filter
@@ -257,47 +345,52 @@ class dataset(Registration):
         
     def Filter_Pairs(self, maxDist=150):
     # Filter pairs above maxDist
-        print('Filtering pairs above',maxDist,'nm...')
-        if not self.linked: raise Exception('Dataset should be linked before filtering pairs!')
-        N0=self.ch1.pos.shape[0]
-        
-        dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 , axis=1))
-        idx = np.argwhere(dists<maxDist)
-        
-        ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
-        ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
-        ch20_pos = self.ch20.pos.numpy()[idx[:,0],:]
-        ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
-        ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
-        ch20_frame = self.ch20.frame.numpy()[idx[:,0]]
-        
-        if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
-        del self.ch1, self.ch2, self.ch20
-        self.ch1 = Channel(ch1_pos, ch1_frame)
-        self.ch2 = Channel(ch2_pos, ch2_frame)
-        self.ch20 = Channel(ch20_pos, ch20_frame)
-        N1=self.ch1.pos.shape[0]
-        print('Out of the '+str(N0)+' pairs localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
-        
+        if maxDist is not None:
+            print('Filtering pairs above',maxDist,'nm...')
+            if not self.linked: raise Exception('Dataset should be linked before filtering pairs!')
+            N0=self.ch1.pos.shape[0]
+            
+            dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 , axis=1))
+            idx = np.argwhere(dists<maxDist)
+            
+            ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
+            ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
+            ch20_pos = self.ch20linked.pos.numpy()[idx[:,0],:]
+            ch1_frame = self.ch1.frame.numpy()[idx[:,0]]
+            ch2_frame = self.ch2.frame.numpy()[idx[:,0]]
+            ch20_frame = self.ch20linked.frame.numpy()[idx[:,0]]
+            
+            if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
+            del self.ch1, self.ch2
+            self.ch1 = Channel(ch1_pos, ch1_frame)
+            self.ch2 = Channel(ch2_pos, ch2_frame)
+            self.ch20linked = Channel(ch20_pos, ch20_frame)
+            N1=self.ch1.pos.shape[0]
+            print('Out of the '+str(N0)+' pairs localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        else:
+            print('WARNING: Filtering is turned off, will pass without filtering.')
         
     def Filter_Neighbours(self, maxDist=150):
-        print('Filtering localizations that have no Neighbours under',maxDist,'nm...')
-        if not self.Neighbours: raise Exception('Tried to filter without the Neighbours having been generated')
-        N0=self.ch1NN.pos.shape[0]
-        
-        dists = np.sqrt(np.sum( (self.ch1NN.pos.numpy() - self.ch2NN.pos.numpy())**2 , axis=1))
-        idx = np.argwhere(dists<maxDist)
-        ch1_pos = self.ch1NN.pos.numpy()[idx[:,0],:]
-        ch2_pos = self.ch2NN.pos.numpy()[idx[:,0],:]
-        ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
-        ch2_frame = self.ch2NN.frame.numpy()[idx[:,0]]
-        
-        if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
-        del self.ch1NN, self.ch2NN
-        self.ch1NN = Channel(ch1_pos, ch1_frame)
-        self.ch2NN = Channel(ch2_pos, ch2_frame)
-        N1=self.ch1NN.pos.shape[0]
-        print('Out of the '+str(N0)+' Neighbours localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        if maxDist is not None:
+            print('Filtering localizations that have no Neighbours under',maxDist,'nm...')
+            if not self.Neighbours: raise Exception('Tried to filter without the Neighbours having been generated')
+            N0=self.ch1NN.pos.shape[0]
+            
+            dists = np.sqrt(np.sum( (self.ch1NN.pos.numpy() - self.ch2NN.pos.numpy())**2 , axis=1))
+            idx = np.argwhere(dists<maxDist)
+            ch1_pos = self.ch1NN.pos.numpy()[idx[:,0],:]
+            ch2_pos = self.ch2NN.pos.numpy()[idx[:,0],:]
+            ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
+            ch2_frame = self.ch2NN.frame.numpy()[idx[:,0]]
+            
+            if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
+            del self.ch1NN, self.ch2NN
+            self.ch1NN = Channel(ch1_pos, ch1_frame)
+            self.ch2NN = Channel(ch2_pos, ch2_frame)
+            N1=self.ch1NN.pos.shape[0]
+            print('Out of the '+str(N0)+' Neighbours localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
+        else:
+            print('WARNING: Filtering is turned off, will pass without filtering.')
         
         
     #%% Generate Neighbours

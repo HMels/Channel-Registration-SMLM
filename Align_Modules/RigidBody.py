@@ -23,7 +23,7 @@ class RigidBodyModel(tf.keras.Model):
         The relative entropy of the current mapping
         
     '''
-    def __init__(self, direct=False, name='shift'):
+    def __init__(self, name='RigidBody'):
         super().__init__(name=name)
         self.d = tf.Variable([0,0], dtype=tf.float32, trainable=True, name='shift')
         self.cos = tf.Variable(1, dtype=tf.float32, trainable=True, name='rotation',

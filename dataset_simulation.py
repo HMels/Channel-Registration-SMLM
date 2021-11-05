@@ -20,6 +20,7 @@ class dataset_simulation(dataset):
         self.imgshape=imgshape    # number of pixels of the dataset
         self.loc_error=loc_error  # localization error
         self.linked=linked        # is the data linked/paired?
+        self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
         dataset.__init__(self, path=None,pix_size=pix_size,linked=linked,imgshape=imgshape,
@@ -368,3 +369,55 @@ class Affine_Deform():
         x1 = locs[:,0]*self.A[1,1] - locs[:,1]*self.A[0,1]
         x2 = -locs[:,0]*self.A[1,0] + locs[:,1]*self.A[0,0]
         return np.stack([x1, x2], axis =1 )/det
+    
+    
+    
+#%% Examples of loading simulation datasets
+if False: #% copy clusters
+    DS1 = dataset_copy('C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5',
+                  linked=False, pix_size=159, loc_error=10, FrameLinking=False, FrameOptimization=True)
+    deform=Affine_Deform()
+    #deform=Deform(random_deform=False, shift=None ) #,shear=None, scaling=None)
+    DS1.load_copydataset_hdf5(deform)
+    #DS1 = DS1.SubsetRandom(subset=0.2, linked=True)
+    DS1 = DS1.SubsetWindow(subset=0.2, linked=True)
+    DS1, DS2 = DS1.SplitDataset(linked=True)
+    DS1.find_neighbours(maxDistance=1000)
+    
+    ## optimization params
+    learning_rates = [1000, .1, 1e-4]
+    epochs = [5, None, 10]
+    pair_filter = [2000, 2000, 2000]
+    gridsize=3000
+    
+
+if False: #% generate dataset beads
+    DS1 = dataset_simulation(imgshape=[256, 512], loc_error=1.4, linked=True,
+                             pix_size=159, FrameLinking=False, FrameOptimization=False)
+    deform=Deform(shear=None, scaling=None, random_deform=False)
+    DS1.generate_dataset_beads(N=216, deform=deform)
+    #DS1, DS2 = DS1.SplitDataset(linked=True)
+    DS2=None
+    
+    ## optimization params
+    learning_rates = [1000, 1, 1e-2]
+    epochs = [100, 500, 300]
+    pair_filter = [1000, 10, 10]
+    gridsize=500
+    
+    
+if False: #% generate dataset clusters
+    DS1 = dataset_simulation(imgshape=[256, 512], loc_error=10, linked=False, 
+                             pix_size=159, FrameLinking=False, FrameOptimization=True)
+    deform=Deform(random_deform=False, shift=None ) #,shear=None, scaling=None)
+    DS1.generate_dataset_clusters(deform=deform)
+    #DS1 = DS1.SubsetRandom(subset=0.2, linked=True)
+    DS1 = DS1.SubsetWindow(subset=0.5, linked=True)
+    DS1, DS2 = DS1.SplitDataset(linked=True)
+    DS1.find_neighbours(maxDistance=1000)
+    
+    ## optimization params
+    learning_rates = [1000, 1, 1e-5]
+    epochs = [5, 20, 10]
+    pair_filter = [800, 400, 400]
+    gridsize=1000

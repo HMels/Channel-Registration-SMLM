@@ -32,23 +32,23 @@ class Plot:
         ## Coupling Datasets if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         pos1_original=self.ch1.pos_all()
-        pos2_original=self.ch20.pos_all()
+        pos2_original=self.ch20linked.pos_all()
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
         
         # Calculating the error
         dist1, avg1, r1 = self.ErrorDist(pos1, pos2)
-        if self.ch20.pos_all() is not None: 
+        if self.ch20linked.pos_all() is not None: 
             dist2, avg2, r2 = self.ErrorDist(pos1_original, pos2_original)
         
         
         ## Plotting
-        if self.ch20.pos_all() is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
+        if self.ch20linked.pos_all() is not None: fig, ((ax3, ax4), (ax1, ax2)) = plt.subplots(2,2)
         else: fig, (ax1, ax2) = plt.subplots(2)
           
         # plotting the histogram
         n1 = ax1.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        if self.ch20.pos_all() is not None:
+        if self.ch20linked.pos_all() is not None:
             n1 = ax3.hist(dist1, label='Mapped', alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
             n2 = ax3.hist(dist2, label='Original', alpha=.8, edgecolor='red', color='tab:blue', bins=nbins)
         else:
@@ -57,7 +57,7 @@ class Plot:
             
         # plotting the FOV
         ax2.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
-        if self.ch20.pos_all() is not None:
+        if self.ch20linked.pos_all() is not None:
             ax4.plot(r1, dist1, 'r.', alpha=.4, label='Mapped error')
             ax4.plot(r2, dist2, 'b.', alpha=.4, label='Original error') 
         else:
@@ -66,13 +66,13 @@ class Plot:
         
         # Plotting the averages as vlines
         ax1.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
-        if self.ch20.pos_all() is not None:
+        if self.ch20linked.pos_all() is not None:
             ax3.vlines(avg2, color='purple', ymin=0, ymax=ymax, label=('avg original = '+str(round(avg2,2))))
             ax3.vlines(avg1, color='green', ymin=0, ymax=ymax, label=('avg mapped = '+str(round(avg1,2))))
           
         # Plotting the averages as hlines
         ax2.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
-        if self.ch20.pos_all() is not None:
+        if self.ch20linked.pos_all() is not None:
             ax4.hlines(avg2, color='purple', xmin=0, xmax=xmax, label=('average original = '+str(round(avg2,2))))
             ax4.hlines(avg1, color='green', xmin=0, xmax=xmax, label=('average mapped = '+str(round(avg1,2))))
         
@@ -92,7 +92,7 @@ class Plot:
         ax2.set_ylabel('Absolute Error')
         ax2.legend()
         
-        if self.ch20.pos_all() is not None:
+        if self.ch20linked.pos_all() is not None:
             ax3.set_title('Comparisson')
             ax3.set_ylim([0,ymax])
             ax3.set_xlim(0)
@@ -109,7 +109,7 @@ class Plot:
           
         fig.tight_layout()
         fig.show()
-        if self.ch20.pos_all() is not None: 
+        if self.ch20linked.pos_all() is not None: 
             print('The original model had an average absolute error of',avg2,'nm\nThe mapped model has an average absolute error of',avg1,'nm')
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
@@ -144,6 +144,9 @@ class Plot:
         fig, ax = plt.subplots(1,2,figsize=(12,6))
         distx=pos1[:,0]-pos2[:,0]
         disty=pos1[:,1]-pos2[:,1]
+        mask=np.where(distx<xlim,True, False)*np.where(disty<xlim,True,False)
+        distx=distx[mask]
+        disty=disty[mask]
         nx = ax[0].hist(distx, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         ny = ax[1].hist(disty, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         
@@ -196,6 +199,7 @@ class Plot:
             
         # Calculating the error
         dist, avg, r = self.ErrorDist(pos1, pos2)
+        dist=dist[np.argwhere(dist<xlim)]
         
         # plotting the histogram
         plt.figure()
@@ -213,7 +217,7 @@ class Plot:
         
         N = pos1.shape[0] * ( n[1][1]-n[1][0] )
         xn=(n[1][:-1]+n[1][1:])/2
-        popt, pcov = curve_fit(func, xn, n[0]/N)
+        popt, pcov = curve_fit(func, xn, n[0]/N, p0=np.std(xn))
         x = np.linspace(0, xlim, 1000)
         y = func(x, *popt)*N
         plt.plot(x, y, c='g',label=(r'fit: $\sigma$='+str(round(popt[0],2))+'[nm] ($\mu$ is kept at 0 [nm])'))
@@ -236,7 +240,7 @@ class Plot:
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorPlotImage(self, other=None, maxDist=30, ps=5, cmap='seismic'):
+    def ErrorFOV(self, other=None, maxDist=30, ps=5, cmap='seismic'):
         ## Coupling Dataset1 if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         dist = self.ch1.pos_all()-self.ch2.pos_all()
@@ -310,12 +314,13 @@ class Plot:
                 pos[0] < self.bounds[0,1] and pos[1] < self.bounds[1,1] )
     
     
-    def generate_channel(self, precision=10):
+    def generate_channel(self, precision=10, heatmap=False):
     # Generates the channels as matrix
         print('Generating Channels as matrix...')       
     
         # normalizing system
-        locs1 = self.ch1.pos_all()  / precision
+        if self.ch10.pos_all() is not None: locs1 = self.ch10.pos_all()  / precision
+        else:locs1 = self.ch1.pos_all()  / precision
         locs2 = self.ch2.pos_all()  / precision
         if self.ch20.pos_all() is not None: locs2_original = self.ch20.pos_all()  / precision
         else: locs2_original=locs2
@@ -332,19 +337,20 @@ class Plot:
         self.axis = np.reshape(self.axis, [1,4])[0]
         
         # generating the matrices to be plotted
-        self.channel1 = self.generate_matrix(locs1)
-        self.channel2 = self.generate_matrix(locs2)
-        if self.ch20.pos_all() is not None: self.channel2_original = self.generate_matrix(locs2_original)
+        self.channel1 = self.generate_matrix(locs1, heatmap)
+        self.channel2 = self.generate_matrix(locs2, heatmap)
+        if self.ch20.pos_all() is not None: self.channel2_original = self.generate_matrix(locs2_original, heatmap)
         
         
-    def generate_matrix(self, locs):
+    def generate_matrix(self, locs, heatmap=False):
     # takes the localizations and puts them in a channel
         channel = np.zeros([self.size_img[0]+1, self.size_img[1]+1], dtype = int)
         for i in range(locs.shape[0]):
             loc = np.round(locs[i,:],0).astype('int')
             if self.isin_domain(loc):
                 loc -= np.round(self.bounds[:,0],0).astype('int') # place the zero point on the left
-                channel[loc[0], loc[1]] = 1
+                if heatmap: channel[loc[0], loc[1]] += 1
+                else: channel[loc[0], loc[1]] = 1
         return channel
     
     
@@ -393,7 +399,7 @@ class Plot:
         if channel1.shape[1]>channel1.shape[0]: channel1=np.rot90(channel1)
         # plotting all channels
         plt.figure()
-        plt.imshow(channel1)
+        plt.imshow(channel1, extent = self.axis)
         plt.xlabel('x1')
         plt.ylabel('x2')
         plt.title('Single Channel view')

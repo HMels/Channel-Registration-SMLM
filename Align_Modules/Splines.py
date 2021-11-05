@@ -35,7 +35,7 @@ class CatmullRomSpline2D(_CatmullRomSplineBase):
     """
     Spline that maps a 2D coordinate onto a n-d output
     """
-    def __init__(self, ControlPoints, direct=True):
+    def __init__(self, ControlPoints):
         super(CatmullRomSpline2D, self).__init__()
         
         assert(len(ControlPoints.shape)==3)
