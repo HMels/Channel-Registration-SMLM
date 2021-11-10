@@ -81,4 +81,4 @@ class Polynomial3Model(tf.keras.Model):
                 ], axis = 3)
             return tf.reduce_sum(tf.reduce_sum(y, axis = 0), axis = 3)
         
-        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
+        else: raise ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

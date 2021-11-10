@@ -34,4 +34,4 @@ class ShiftModel(tf.keras.Model):
             return pts + self.d[None]
         elif len(pts.shape)==3: # transform matrices
             return pts + self.d[None,None] 
-        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
+        else: raise ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

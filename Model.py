@@ -22,7 +22,7 @@ from Align_Modules.Shift import ShiftModel
 
 
 class Model(Registration):
-    def __init__(self):     
+    def __init__(self, execute_linked=True):     
         ## Models
         self.AffineModel = None
         self.Polynomial3Model = None
@@ -35,15 +35,19 @@ class Model(Registration):
         
         ## Neighbours
         self.ControlPoints=None
-        self.NN_maxDist=None
+        self.NN_maxDistance=None
         self.NN_threshold=None
-        self.Neighbours=False     
-        Registration.__init__(self)
+        self.Neighbours=False   
+        
+        self.execute_linked=execute_linked
+        Registration.__init__(self, execute_linked=execute_linked)
         
         
     #%% model
-    def TrainRegistration(self, learning_rates=[1e3,.1,1e-3], epochs=[100,100,100], pair_filter=[250,30],
+    def TrainRegistration(self, execute_linked=None, learning_rates=[1e3,.1,1e-3], epochs=[100,100,100], pair_filter=[250,30],
                          gridsize=3000, edge_grids=1):
+        if execute_linked is not None: self.execute_linked=execute_linked
+        else: self.execute_linked=self.linked
         
         start=time.time()
         
@@ -61,19 +65,20 @@ class Model(Registration):
         self.Transform_Model(self.AffineModel)
             
         #% CatmullRomSplines
-        ch1_input,ch2_input=self.InitializeSplines(gridsize=gridsize, edge_grids=edge_grids)
-        self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
-        self.Train_Model(self.SplinesModel, lr=learning_rates[2], epochs=epochs[2], opt_fn=tf.optimizers.SGD, 
-                         ch1=ch1_input, ch2=ch2_input)        
-        self.ControlPoints = self.SplinesModel.ControlPoints
-        self.ch2.pos.assign(self.InputSplines(
-            self.Transform_Model(self.SplinesModel,  ch2=self.InputSplines(self.ch2.pos)),
-            inverse=True))
-        if self.Neighbours:
-            self.ch2NN.pos.assign(self.InputSplines(
-                self.Transform_Model(self.SplinesModel,  ch2=self.InputSplines(self.ch2NN.pos)),
+        if epochs[2] is not None:
+            ch1_input,ch2_input=self.InitializeSplines(gridsize=gridsize, edge_grids=edge_grids)
+            self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
+            self.Train_Model(self.SplinesModel, lr=learning_rates[2], epochs=epochs[2], opt_fn=tf.optimizers.Adam, 
+                             ch1=ch1_input, ch2=ch2_input)        
+            self.ControlPoints = self.SplinesModel.ControlPoints
+            self.ch2.pos.assign(self.InputSplines(
+                self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2.pos)),
                 inverse=True))
-        #self.PlotSplineGrid(gridsize=gridsize, edge_grids=edge_grids)
+            if self.Neighbours:
+                self.ch2NN.pos.assign(self.InputSplines(
+                    self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2NN.pos)),
+                    inverse=True))
+        #self.PlotSplineGrid(plotarrows=False)
             
         if pair_filter[1] is not None:
             self.Filter(pair_filter[1])
@@ -91,11 +96,11 @@ class Model(Registration):
         
         
     #%% SimpleShift
-    def SimpleShift(self, other=None, maxDist=2000):
+    def SimpleShift(self, other=None, maxDistance=2000):
         print('Shifting the channels according to a simple nearest neighbour least squares optimisation...')
         start=time.time()
         linked=self.linked
-        if not self.linked: self.link_dataset(maxDist=maxDist)
+        if not self.linked: self.link_dataset(maxDistance=maxDistance)
         
         distx=self.ch1.pos[:,0]-self.ch2.pos[:,0]
         disty=self.ch1.pos[:,1]-self.ch2.pos[:,1]
@@ -123,6 +128,8 @@ class Model(Registration):
                 tf.stack([other.ch2.pos[:,0]+poptx[0],other.ch2.pos[:,1]+popty[0]],axis=1)
                 )
             return other
+        
+        
     #%% miscaleneous fn
     def copy_models(self, other):
         self.AffineModel = copy.deepcopy(other.AffineModel)

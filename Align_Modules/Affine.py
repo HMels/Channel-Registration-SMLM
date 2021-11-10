@@ -45,4 +45,4 @@ class AffineModel(tf.keras.Model):
             x2 = pts_mapped[:,:,0]*self.A[1,0] + pts_mapped[:,:,1]*self.A[1,1]
             return tf.stack([x1, x2], axis =2 )
         
-        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
+        else: raise ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

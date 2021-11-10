@@ -115,9 +115,11 @@ for i in range(len(Ntimes)):
             DS2.Transform_Splines()
             DS2.Filter(pair_filter[1])
             sg = DS2.ErrorDistribution_r(nbins=100, xlim=pair_filter[2], error=DS1.loc_error)
-        else: sg = DS1.ErrorDistribution_r(nbins=100, xlim=pair_filter[2], error=DS1.loc_error)
+            N[i,j]=(DS2.ch1.pos.shape[0])
+        else: 
+            sg = DS1.ErrorDistribution_r(nbins=100, xlim=pair_filter[2], error=DS1.loc_error)
+            N[i,j]=(DS1.ch1.pos.shape[0])
         sigma[i,j]=(sg)
-        N[i,j]=(DS1.ch1.pos.shape[0])
     
 #%% plotting
 ErrorDist(np.average(sigma,axis=1), np.average(N,axis=1), xlim=pair_filter[2], error=DS1.loc_error)

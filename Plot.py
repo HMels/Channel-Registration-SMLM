@@ -19,8 +19,42 @@ import tensorflow as tf
 
 class Plot:
     def __init__(self):
-        pass
-
+        self.rdist_params=None
+        self.rdist_var=None
+        self.rdist_opt=None
+        self.xdist_pararms=None
+        self.xdist_var=None
+        self.ydist_pararms=None
+        self.ydist_var=None
+        self.xydist_opt=None
+        
+    
+    def model_summary(self):
+        print('\n\n_________________________MODEL SUMMARY_________________________')
+        print('- For the first channel, of the '+str(self.ch10.pos.shape[0])+' localizations, '
+              +str(self.ch10.pos.shape[0]-self.ch1.pos.shape[0])+' have been filtered out! ('
+              +str(round((1-(self.ch1.pos.shape[0]/self.ch10.pos.shape[0]))*100,1))+'%)')
+        print('- For the second channel of the '+str(self.ch20.pos.shape[0])+' localizations, '
+              +str(self.ch20.pos.shape[0]-self.ch2.pos.shape[0])+' have been filtered out! ('
+              +str(round((1-(self.ch2.pos.shape[0]/self.ch20.pos.shape[0]))*100,1))+'%)')
+        
+        if self.rdist_params is not None:
+            print('- The absolute distribution fit returned the values of [\u03BC,\u03C3]=['
+                  +str(self.rdist_params[0])+', '+str(self.rdist_params[1])+'+/-'+str(self.rdist_var[0])+']nm.')
+            if self.rdist_opt is not None: 
+                print('The optimal values were ['+str(self.rdist_opt[0])+', '+str(self.rdist_opt[1])+']nm.')
+        if self.xdist_params is not None:
+            print('- The relative distribution fit returned the values of [\u03BC\N{SUBSCRIPT ONE},\u03C3\N{SUBSCRIPT ONE}]=['
+                  +str(self.xdist_params[0])+', '+str(self.xdist_params[0])+']+/-['
+                  +str(self.xdist_var[0][0])+', '+str(self.xdist_var[1][1])+']nm,')
+            print('[\u03BC\N{SUBSCRIPT TWO},\u03C3\N{SUBSCRIPT TWO}]=['
+                  +str(self.ydist_params[0])+', '+str(self.ydist_params[0])+']+/-['
+                  +str(self.ydist_var[0][0])+', '+str(self.ydist_var[1][1])+']nm.')
+            if self.xydist_opt is not None:
+                print('The optimal values were ['+str(self.xydist_opt[0])+', '+str(self.xydist_opt[1])+']nm.')
+        print('\n\n')
+            
+            
     def ErrorDist(self, pos1, pos2):
     # Generates the error, average and radius
         dist = np.sqrt( np.sum( ( pos1 - pos2 )**2, axis = 1) )
@@ -110,10 +144,8 @@ class Plot:
         fig.tight_layout()
         fig.show()
         if self.ch20linked.pos_all() is not None: 
-            print('The original model had an average absolute error of',avg2,'nm\nThe mapped model has an average absolute error of',avg1,'nm')
             return avg1, avg2, fig, (ax3, ax1, ax4, ax2)
         else: 
-            print('The mapped model has an average absolute error of',avg1,'nm')
             return avg1, fig, (ax1, ax2)
 
 
@@ -136,8 +168,9 @@ class Plot:
         plt.tight_layout()
         
         
-    def ErrorDistribution_xy(self, nbins=30, xlim=31, error=None):
+    def ErrorDistribution_xy(self, nbins=30, xlim=31, error=None, mu=None, fit_data=True):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
+        if mu is None: mu=0
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
             
@@ -147,34 +180,37 @@ class Plot:
         mask=np.where(distx<xlim,True, False)*np.where(disty<xlim,True,False)
         distx=distx[mask]
         disty=disty[mask]
-        nx = ax[0].hist(distx, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
-        ny = ax[1].hist(disty, label='data',alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        nx = ax[0].hist(distx, range=[-xlim,xlim], label='N='+str(pos1.shape[0]),alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        ny = ax[1].hist(disty, range=[-xlim,xlim], label='N='+str(pos1.shape[0]),alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         
-         ## fit bar plot data using curve_fit
-        def func(r, mu, sigma):
-            return np.exp(-(r - mu) ** 2 / (2 * sigma ** 2)) / (np.sqrt(2*np.pi)*sigma)
         
-        Nx = pos1.shape[0] * ( nx[1][1]-nx[1][0] )
-        Ny = pos1.shape[0] * ( ny[1][1]-ny[1][0] )
-        xn=(nx[1][:-1]+nx[1][1:])/2
-        yn=(ny[1][:-1]+ny[1][1:])/2
-        poptx, pcovx = curve_fit(func, xn, nx[0]/Nx, p0=[np.average(distx), np.std(distx)])
-        popty, pcovy = curve_fit(func, yn, ny[0]/Ny, p0=[np.average(disty), np.std(disty)])
-        x = np.linspace(-xlim, xlim, 1000)
-        yx = func(x, *poptx)*Nx
-        yy = func(x, *popty)*Ny
-        ax[0].plot(x, yx, c='g',label=(r'fit: $\mu$='+str(round(poptx[0],2))+', $\sigma$='+str(round(poptx[1],2))+'[nm]'))
-        ax[1].plot(x, yy, c='g',label=(r'fit: $\mu$='+str(round(popty[0],2))+', $\sigma$='+str(round(popty[1],2))+'[nm]'))
-        ymax = np.max([np.max(nx[0]),np.max(ny[0]), np.max(yx), np.max(yy)])*1.1
-        
-        ## plot how function should look like
-        if error is not None:
-            sgm=np.sqrt(2)*error
-            opt_yx = func(x, 0, sgm)*Nx
-            opt_yy = func(x, 0, sgm)*Ny
-            ax[0].plot(x, opt_yx, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
-            ax[1].plot(x, opt_yy, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
-            if np.max([np.max(opt_yx),np.max(opt_yy)])>ymax: ymax=np.max([np.max(opt_yx),np.max(opt_yy)])*1.1
+        if fit_data: ## fit bar plot data using curve_fit
+            def func(r, mu, sigma):
+                return np.exp(-(r - mu) ** 2 / (2 * sigma ** 2)) / (np.sqrt(2*np.pi)*sigma)
+            
+            Nx = pos1.shape[0] * ( nx[1][1]-nx[1][0] )
+            Ny = pos1.shape[0] * ( ny[1][1]-ny[1][0] )
+            xn=(nx[1][:-1]+nx[1][1:])/2
+            yn=(ny[1][:-1]+ny[1][1:])/2
+            poptx, pcovx = curve_fit(func, xn, nx[0]/Nx, p0=[np.average(distx), np.std(distx)])
+            popty, pcovy = curve_fit(func, yn, ny[0]/Ny, p0=[np.average(disty), np.std(disty)])
+            x = np.linspace(-xlim, xlim, 1000)
+            yx = func(x, *poptx)*Nx
+            yy = func(x, *popty)*Ny
+            ax[0].plot(x, yx, c='g',label=(r'fit: $\mu$='+str(round(poptx[0],2))+', $\sigma$='+str(round(poptx[1],2))+'nm'))
+            ax[1].plot(x, yy, c='g',label=(r'fit: $\mu$='+str(round(popty[0],2))+', $\sigma$='+str(round(popty[1],2))+'nm'))
+            ymax = np.max([np.max(nx[0]),np.max(ny[0]), np.max(yx), np.max(yy)])*1.1
+            
+            ## plot how function should look like
+            if error is not None:
+                sgm=np.sqrt(2)*error+mu
+                opt_yx = func(x, 0, sgm)*Nx
+                opt_yy = func(x, 0, sgm)*Ny
+                ax[0].plot(x, opt_yx, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
+                ax[1].plot(x, opt_yy, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
+                if np.max([np.max(opt_yx),np.max(opt_yy)])>ymax: ymax=np.max([np.max(opt_yx),np.max(opt_yy)])*1.1
+        else: ymax=np.max([np.max(nx[0]),np.max(ny[0])])*1.1
+
 
         ax[0].set_ylim([0,ymax])
         ax[0].set_xlim(-xlim,xlim)
@@ -189,11 +225,20 @@ class Plot:
         ax[1].legend()
         fig.tight_layout()
         
-        return poptx, popty
+        if fit_data:
+            self.xdist_params=np.array([np.round(poptx[0],2),np.round(poptx[1],2)])
+            self.xdist_var=np.array([np.round(pcovx[0],2),np.round(pcovx[1],2)])
+            self.ydist_params=np.array([np.round(popty[0],2),np.round(popty[1],2)])
+            self.ydist_var=np.array([np.round(pcovy[0],2),np.round(pcovy[1],2)])
+            if error is not None: self.xydist_opt=np.array([np.round(mu,2),np.round(sgm,2)])
+            else: self.xydist_opt=None
+            return poptx, popty
+        else: return None, None
         
         
-    def ErrorDistribution_r(self, nbins=30, xlim=31, error=None):
+    def ErrorDistribution_r(self, nbins=30, xlim=31, error=None, mu=None, fit_data=True):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
+        if mu is None: mu=0
         pos1=self.ch1.pos_all()
         pos2=self.ch2.pos_all()
             
@@ -203,31 +248,33 @@ class Plot:
         
         # plotting the histogram
         plt.figure()
-        n=plt.hist(dist, label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        n=plt.hist(dist, range=[0,xlim], label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
         #plt.axvline(x=avg, label='average='+str(round(avg,2))+'[nm]')
         ymax = np.max(n[0])*1.1
         
         
-        ## fit bar plot data using curve_fit
-        def func(r, sigma):
-            # from Churchman et al 2006
-            sigma2=sigma**2
-            return r/sigma2*np.exp(-r**2/2/sigma2)
-            #return A*(r/sigma2)/(2*np.pi)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
+        if fit_data: ## fit bar plot data using curve_fit
+            def func(r, sigma, mu=mu):
+                # from Churchman et al 2006
+                sigma2=sigma**2
+                if mu==0:
+                    return r/sigma2*np.exp(-r**2/2/sigma2)
+                else:
+                    return (r/sigma2)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
+    
+            N = pos1.shape[0] * ( n[1][1]-n[1][0] )
+            xn=(n[1][:-1]+n[1][1:])/2 
+            popt, pcov = curve_fit(func, xn, n[0]/N, p0=np.std(xn))
+            x = np.linspace(0, xlim, 1000)
+            y = func(x, *popt)*N
+            plt.plot(x, y, c='g',label=(r'fit: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(popt[0],2))+'nm'))
         
-        N = pos1.shape[0] * ( n[1][1]-n[1][0] )
-        xn=(n[1][:-1]+n[1][1:])/2
-        popt, pcov = curve_fit(func, xn, n[0]/N, p0=np.std(xn))
-        x = np.linspace(0, xlim, 1000)
-        y = func(x, *popt)*N
-        plt.plot(x, y, c='g',label=(r'fit: $\sigma$='+str(round(popt[0],2))+'[nm] ($\mu$ is kept at 0 [nm])'))
-        
-        ## plot how function should look like
-        if error is not None:
-            sgm=np.sqrt(2)*error
-            y = func(x, sgm)*N
-            plt.plot(x, y, c='b',label=(r'optimum: $\sigma$='+str(round(sgm,2))+'[nm] ($\sqrt{2}$ loc-error)'))
-            if np.max(y)>ymax: ymax=np.max(y)*1.1
+            ## plot how function should look like
+            if error is not None:
+                sgm=np.sqrt(2)*error
+                y = func(x, sgm, mu)*N
+                plt.plot(x, y, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
+                if np.max(y)>ymax: ymax=np.max(y)*1.1
 
         # Some extra plotting parameters
         plt.ylim([0,ymax])
@@ -236,11 +283,19 @@ class Plot:
         plt.ylabel('# of localizations')
         plt.legend()
         plt.tight_layout()
-        return popt
+        
+        
+        if fit_data:
+            self.rdist_params=np.array([np.round(mu,2),np.round(popt[0],2)])
+            self.rdist_var=np.round(pcov[0],2)
+            if error is not None: self.rdist_opt=np.array([np.round(mu,2),np.round(sgm,2)])
+            else: self.rdist_opt=None
+            return popt
+        else: return None
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorFOV(self, other=None, maxDist=30, ps=5, cmap='seismic'):
+    def ErrorFOV(self, other=None, maxDistance=30, ps=5, cmap='seismic'):
         ## Coupling Dataset1 if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         dist = self.ch1.pos_all()-self.ch2.pos_all()
@@ -407,7 +462,7 @@ class Plot:
         
         
     #%% Plotting the Grid
-    def PlotSplineGrid(self, gridsize=None, edge_grids=None, ch1=None, ch2=None, ch20=None, locs_markersize=25,
+    def PlotSplineGrid(self, ch1=None, ch2=None, ch20=None, locs_markersize=25,
                         CP_markersize=20, d_grid=.1, Ngrids=4, plotarrows=True, plotmap=False): 
         '''
         Plots the grid and the shape of the grid in between the Control Points
@@ -437,40 +492,16 @@ class Plot:
             ch1=self.ch1.pos
             ch2=self.ch2.pos
             ch20=self.ch20.pos
-        if gridsize is None: gridsize=self.gridsize
-        if edge_grids is None: edge_grids=self.edge_grids
-        if self.SplinesModel is None:
-            x1_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,0]))),
-                                  np.min(tf.reduce_min(tf.floor(ch2[:,0])))])/gridsize
-            x2_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,1]))),
-                                  np.min(tf.reduce_min(tf.floor(ch2[:,1])))])/gridsize
-            x1_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,0]))),
-                                  np.max(tf.reduce_max(tf.floor(ch2[:,0])))])/gridsize
-            x2_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,1]))),
-                                  np.max(tf.reduce_max(tf.floor(ch2[:,1])))])/gridsize
-            x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, dtype=tf.float32)
-            x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, dtype=tf.float32)
-            ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
-        else:
-            x1_min = self.x1_min
-            x2_min = self.x2_min
-            x1_max = self.x1_max
-            x2_max = self.x2_max
-            ControlPoints = self.ControlPoints
         
         ## The original points
-        ch1 = tf.Variable( tf.stack([
-            (ch1[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
-            (ch1[:,1] - np.min(ch20[:,1])) + edge_grids*gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch2 = tf.Variable( tf.stack([
-            (ch2[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
-            (ch2[:,1] - np.min(ch20[:,1]) ) + edge_grids*gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
-        ch20 = tf.Variable( tf.stack([
-            (ch20[:,0] - np.min(ch20[:,0]) ) + edge_grids*gridsize,
-            (ch20[:,1] - np.min(ch20[:,1]) ) + edge_grids*gridsize
-            ], axis=-1), dtype=tf.float32, trainable=False)
+        def zero_axis(pts):
+                return (tf.Variable( tf.stack([
+                pts[:,0] - (self.x1_min-1 - self.edge_grids) * self.gridsize,
+                pts[:,1] - (self.x2_min-1 - self.edge_grids) * self.gridsize 
+                ], axis=-1), dtype=tf.float32, trainable=False))
+        ch1=zero_axis(ch1)
+        ch2=zero_axis(ch2)
+        ch20=zero_axis(ch20)
         
         # plotting the localizations
         plt.figure()
@@ -484,15 +515,15 @@ class Plot:
             plt.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
         
         # plotting the ControlPoints
-        plt.scatter(ControlPoints[:,:,0]*gridsize, ControlPoints[:,:,1]*gridsize,
+        plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
                     c='b', marker='d', s=CP_markersize, label='ControlPoints')
         
         ## Horizontal Grid
-        x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, delta=d_grid, dtype=tf.float32)
-        x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, delta=1/Ngrids, dtype=tf.float32)
+        x1_grid = tf.range(0, tf.reduce_max(self.ControlPoints[:,:,0])+d_grid, delta=d_grid, dtype=tf.float32)
+        x2_grid = tf.range(0, tf.reduce_max(self.ControlPoints[:,:,1])+d_grid, delta=1/Ngrids, dtype=tf.float32)
         Grid = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2)) 
-        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * gridsize
-        else: Grid = Grid*gridsize
+        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * self.gridsize
+        else: Grid = Grid*self.gridsize
         (nn, i,j)=(x1_grid.shape[0],0,0)
         while i<Grid.shape[0]:
             if j%Ngrids==0:
@@ -503,11 +534,11 @@ class Plot:
             j+=1
 
         ## Vertical Grid
-        x1_grid = tf.range(0, tf.math.ceil(x1_max)-x1_min+edge_grids+1+d_grid, delta=1/Ngrids, dtype=tf.float32)
-        x2_grid = tf.range(0, tf.math.ceil(x2_max)-x2_min+edge_grids+1+d_grid, delta=d_grid, dtype=tf.float32)
+        x1_grid = tf.range(0, tf.reduce_max(self.ControlPoints[:,:,0])+d_grid, delta=1/Ngrids, dtype=tf.float32)
+        x2_grid = tf.range(0, tf.reduce_max(self.ControlPoints[:,:,1])+d_grid, delta=d_grid, dtype=tf.float32)
         Grid = tf.gather(tf.reshape(tf.stack(tf.meshgrid(x2_grid, x1_grid), axis=-1) , (-1,2)), [1,0], axis=1)
-        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * gridsize
-        else: Grid = Grid*gridsize
+        if self.SplinesModel is not None: Grid = self.SplinesModel( Grid ) * self.gridsize
+        else: Grid = Grid*self.gridsize
         (nn, i,j)=(x2_grid.shape[0],0,0)
         while i<Grid.shape[0]:
             if j%Ngrids==0:

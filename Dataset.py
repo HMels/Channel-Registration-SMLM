@@ -16,16 +16,17 @@ from Model import Model
 
 #%% Dataset
 class dataset(Model):
-    def __init__(self, path, pix_size=1, loc_error=10, linked=False, imgshape=[512, 512], 
-                 FrameLinking=True, FrameOptimization=False):
+    def __init__(self, path, pix_size=1, loc_error=10, mu=0, linked=False, imgshape=[512, 512], 
+                 FrameLinking=True, BatchOptimization=False):
         self.path=path            # the string or list containing the strings of the file location of the dataset
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.loc_error=loc_error  # localization error
+        self.mu=mu
         self.imgshape=imgshape    # number of pixels of the dataset
         self.linked=linked        # is the data linked/paired?
         self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
-        self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
+        self.BatchOptimization=BatchOptimization    # will the dataset be optimized per frame
         self.subset=1       
         Model.__init__(self)        
         
@@ -69,13 +70,17 @@ class dataset(Model):
         ## Loading dataset
         if len(self.path)==1 or isinstance(self.path,str):
             # Dataset is grouped, meaning it has to be split manually
-            print('Loading dataset... \n Grouping...')
+            print('Loading dataset...')
+            print(self.path[0])
             ds = Dataset.load(self.path[0],saveGroups=True)
+            print('\n Grouping...')
             ch1 = ds[ds.group==0]
             ch2 = ds[ds.group==1]
         elif len(self.path)==2:
             # Dataset consists over 2 files
             print('Loading dataset...')
+            print(self.path[0])
+            print(self.path[1])
             ch1 = Dataset.load(self.path[0])
             ch2 = Dataset.load(self.path[1])
         else:
@@ -207,26 +212,68 @@ class dataset(Model):
             
         if len(mask1)==0 or len(mask2)==0: raise  ValueError('No values returned after subset')
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
+    
+    
+    def SubsetFrames(self, begin_frames, end_frames):
+    # select a certain subset of frames
+        if end_frames<begin_frames: raise ValueError('Invalid input')
+        idx1=(np.where(self.ch1.frame<end_frames,True,False)*
+                         np.where(self.ch1.frame>=begin_frames,True,False))
+        idx2=(np.where(self.ch2.frame<end_frames,True,False)*
+                         np.where(self.ch2.frame>=begin_frames,True,False))
+        
+        if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
+        self.subset*=(end_frames-begin_frames)/np.max(tf.unique(self.ch1.frame)[0])
+        if self.linked:
+            idx=idx1*idx2
+            return self.gather(np.argwhere(idx), np.argwhere(idx))
+        else:
+            return self.gather(np.argwhere(idx1), np.argwhere(idx2))
         
     
-    def SplitBatches(self, Nbatches):
+    def SplitBatches(self, Nbatches, FrameLinking=False):
         self.Nbatches=Nbatches
-        if self.linked:
-            batches=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
-            self.ch1.frame.assign(batches)
-            self.ch2.frame.assign(batches)
-            self.ch20linked.frame.assign(batches)
-        else:
-            batches1=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
-            batches2=np.random.randint(0,Nbatches,self.ch2.frame.shape[0])
-            self.ch1.frame.assign(batches1)
-            self.ch2.frame.assign(batches2)
-            self.ch20linked.frame.assign(batches2)
-        if self.Neighbours:
-            batches=np.random.randint(0,Nbatches,self.ch1NN.frame.shape[0])
-            self.ch1NN.frame.assign(batches)
-            self.ch2NN.frame.assign(batches)
-            
+        if not FrameLinking:
+            if self.linked:
+                batches=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
+                self.ch1.frame.assign(batches)
+                self.ch2.frame.assign(batches)
+                self.ch20linked.frame.assign(batches)
+            else:
+                batches1=np.random.randint(0,Nbatches,self.ch1.frame.shape[0])
+                batches2=np.random.randint(0,Nbatches,self.ch2.frame.shape[0])
+                self.ch1.frame.assign(batches1)
+                self.ch2.frame.assign(batches2)
+                self.ch20linked.frame.assign(batches2)
+            if self.Neighbours:
+                batches=np.random.randint(0,Nbatches,self.ch1NN.frame.shape[0])
+                self.ch1NN.frame.assign(batches)
+                self.ch2NN.frame.assign(batches)
+                
+        else: # keeps the positions that are in the same frame within the same frame
+            frame1=np.zeros((self.ch1.frame+1).shape[0])
+            frame2=np.zeros((self.ch2.frame+1).shape[0])
+            frame20=np.zeros((self.ch20linked.frame+1).shape[0])
+            if self.Neighbours:
+                frameNN1=np.zeros((self.ch1NN.frame+1).shape[0])
+                frameNN2=np.zeros((self.ch2NN.frame+1).shape[0])
+
+            for frame in tf.unique(self.ch1.frame+1)[0]:
+                batch=np.random.randint(0,Nbatches)                
+                frame1[np.argwhere(self.ch1.frame+1==frame)]=batch
+                frame2[np.argwhere(self.ch2.frame+1==frame)]=batch
+                frame20[np.argwhere(self.ch20linked.frame+1==frame)]=batch
+                if self.Neighbours:      
+                    frameNN1[np.argwhere(self.ch1NN.frame+1==frame)]=batch
+                    frameNN2[np.argwhere(self.ch2NN.frame+1==frame)]=batch
+                    
+            self.ch1.frame.assign(tf.Variable(frame1,dtype=tf.float32,trainable=False))
+            self.ch2.frame.assign(tf.Variable(frame2,dtype=tf.float32,trainable=False))
+            self.ch20linked.frame.assign(tf.Variable(frame20,dtype=tf.float32,trainable=False))
+            if self.Neighbours:
+                self.ch1NN.frame.assign(tf.Variable(frameNN1,dtype=tf.float32,trainable=False))
+                self.ch2NN.frame.assign(tf.Variable(frameNN2,dtype=tf.float32,trainable=False))
+                    
         
     def SplitDataset(self, linked=None):
     # Splits dataset into 2 halves for cross validation)
@@ -274,12 +321,13 @@ class dataset(Model):
     
     
     #%% pair_functions
-    def link_dataset(self, maxDist=None,FrameLinking=None):
-        if maxDist is None: maxDist=1000
+    def link_dataset(self, maxDistance=None,FrameLinking=None):
+        if maxDistance is None: maxDistance=np.float32(1000)
+        else: maxDistance=np.float32(maxDistance)
         try: #% linking datasets that are simulated works simpler
             self.relink_dataset()
         except:
-            print('Linking Datasets for localizations within a distance of',maxDist,'nm...')
+            print('Linking Datasets for localizations within a distance of',maxDistance,'nm...')
             if self.linked: print('WARNING: Dataset already linked')
             if FrameLinking is None: FrameLinking=self.FrameLinking
             ch1_frame=self.ch1.frame.numpy()
@@ -297,7 +345,7 @@ class dataset(Model):
                     framepos1=ch1_pos[ch1_frame==fr,:]
                     framepos2=ch2_pos[ch2_frame==fr,:]
                     framepos20=ch20_pos[ch20_frame==fr,:]
-                    idxlist=self.FindNeighbours_idx(framepos1, framepos2, maxDist=maxDist)
+                    idxlist=self.FindNeighbours_idx(framepos1, framepos2, maxDistance=maxDistance)
                     
                     for idx in idxlist:
                         if len(idx[0])!=0:
@@ -312,7 +360,7 @@ class dataset(Model):
                             pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
                 
             else: ## taking the whole dataset as a single batch
-                idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDist=maxDist)
+                idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDistance=maxDistance)
                 for idx in idxlist:
                     if len(idx[0])!=0:
                         i=idx[0][0]
@@ -337,21 +385,21 @@ class dataset(Model):
         
         
     #%% Filter
-    def Filter(self, maxDist):
+    def Filter(self, maxDistance):
     # The function for filtering both pairs and neigbhours 
-        if self.linked: self.Filter_Pairs(maxDist)
-        if self.Neighbours: self.Filter_Neighbours(maxDist)
+        if self.linked: self.Filter_Pairs(maxDistance)
+        if self.Neighbours: self.Filter_Neighbours(maxDistance)
         
         
-    def Filter_Pairs(self, maxDist=150):
-    # Filter pairs above maxDist
-        if maxDist is not None:
-            print('Filtering pairs above',maxDist,'nm...')
+    def Filter_Pairs(self, maxDistance=150):
+    # Filter pairs above maxDistance
+        if maxDistance is not None:
+            print('Filtering pairs above',maxDistance,'nm...')
             if not self.linked: raise Exception('Dataset should be linked before filtering pairs!')
             N0=self.ch1.pos.shape[0]
             
             dists = np.sqrt(np.sum( (self.ch1.pos.numpy() - self.ch2.pos.numpy())**2 , axis=1))
-            idx = np.argwhere(dists<maxDist)
+            idx = np.argwhere(dists<maxDistance)
             
             ch1_pos = self.ch1.pos.numpy()[idx[:,0],:]
             ch2_pos = self.ch2.pos.numpy()[idx[:,0],:]
@@ -370,14 +418,15 @@ class dataset(Model):
         else:
             print('WARNING: Filtering is turned off, will pass without filtering.')
         
-    def Filter_Neighbours(self, maxDist=150):
-        if maxDist is not None:
-            print('Filtering localizations that have no Neighbours under',maxDist,'nm...')
+        
+    def Filter_Neighbours(self, maxDistance=150):
+        if maxDistance is not None:
+            print('Filtering localizations that have no Neighbours under',maxDistance,'nm...')
             if not self.Neighbours: raise Exception('Tried to filter without the Neighbours having been generated')
             N0=self.ch1NN.pos.shape[0]
             
             dists = np.sqrt(np.sum( (self.ch1NN.pos.numpy() - self.ch2NN.pos.numpy())**2 , axis=1))
-            idx = np.argwhere(dists<maxDist)
+            idx = np.argwhere(dists<maxDistance)
             ch1_pos = self.ch1NN.pos.numpy()[idx[:,0],:]
             ch2_pos = self.ch2NN.pos.numpy()[idx[:,0],:]
             ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
@@ -396,10 +445,10 @@ class dataset(Model):
     #%% Generate Neighbours
     def find_neighbours(self, maxDistance=50, FrameLinking=None):
     # Tries to generate neighbours according to all spots
-        print('Finding neighbours within a distance of',maxDistance,'nm for spots.')
+        print('Finding neighbours within a distance of',maxDistance,'nm.')
         if FrameLinking is None: FrameLinking=self.FrameLinking
         maxDistance=np.float32(maxDistance)
-        self.NN_maxDist=maxDistance
+        self.NN_maxDistance=maxDistance
         
         with Context() as ctx: # loading all NN
             counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
@@ -423,10 +472,10 @@ class dataset(Model):
         self.Neighbours=True
             
     
-    def FindNeighbours_idx(self, pos1, pos2, maxDist):
+    def FindNeighbours_idx(self, pos1, pos2, maxDistance):
     # prints a list containing the neighbouring indices of two channels
         with Context() as ctx: # loading all NN
-            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDist)
+            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDistance)
     
         ## putting all NNidx in a list 
         (idxlist, pos, i) = ([], 0,0)

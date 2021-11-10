@@ -52,4 +52,4 @@ class RigidBodyModel(tf.keras.Model):
             x2 = pts_mapped[:,:,1]*self.cos #+ pts_mapped[:,:,0]*sin
             return tf.stack([x1, x2], axis =2 )
         
-        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
+        else: raise ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )

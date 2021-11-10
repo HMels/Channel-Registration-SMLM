@@ -39,3 +39,4 @@ class Channel:
         del self.pos,self.frame
         self.pos=tf.Variable(tf.concat([pos,other.pos],axis=0), dtype=tf.float32, trainable=False) 
         self.frame=tf.Variable(tf.concat([frame,other.frame],axis=0), dtype=tf.float32, trainable=False) 
+        

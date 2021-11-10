@@ -15,16 +15,16 @@ from Channel import Channel
 
 class dataset_simulation(dataset):
     def __init__(self, pix_size=1, linked=False, loc_error=10, imgshape=[512, 512], 
-                 FrameLinking=False, FrameOptimization=False):
+                 FrameLinking=False, BatchOptimization=False):
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.imgshape=imgshape    # number of pixels of the dataset
         self.loc_error=loc_error  # localization error
         self.linked=linked        # is the data linked/paired?
         self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
-        self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
+        self.BatchOptimization=BatchOptimization    # will the dataset be optimized per frame
         dataset.__init__(self, path=None,pix_size=pix_size,linked=linked,imgshape=imgshape,
-                         FrameLinking=FrameLinking, loc_error=loc_error, FrameOptimization=FrameOptimization)
+                         FrameLinking=FrameLinking, loc_error=loc_error, BatchOptimization=BatchOptimization)
         
         
     #%% generate functions
@@ -151,17 +151,17 @@ class dataset_simulation(dataset):
 #%% Dataset copy
 class dataset_copy(dataset):
     def __init__(self, path, pix_size=1, loc_error=10, linked=False, imgshape=[512, 512], 
-                 FrameLinking=True, FrameOptimization=False):
+                 FrameLinking=True, BatchOptimization=False):
         self.path=path            # the string or list containing the strings of the file location of the dataset
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.loc_error=loc_error  # localization error
         self.imgshape=imgshape    # number of pixels of the dataset
         self.linked=linked        # is the data linked/paired?
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
-        self.FrameOptimization=FrameOptimization    # will the dataset be optimized per frame
+        self.BatchOptimization=BatchOptimization    # will the dataset be optimized per frame
         self.subset=1
         dataset.__init__(self, path,pix_size=pix_size,linked=linked,imgshape=imgshape,
-                         FrameLinking=FrameLinking,FrameOptimization=FrameOptimization)
+                         FrameLinking=FrameLinking,BatchOptimization=BatchOptimization)
     
     
     def load_copydataset_hdf5(self, deform):
@@ -375,7 +375,7 @@ class Affine_Deform():
 #%% Examples of loading simulation datasets
 if False: #% copy clusters
     DS1 = dataset_copy('C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5',
-                  linked=False, pix_size=159, loc_error=10, FrameLinking=False, FrameOptimization=True)
+                  linked=False, pix_size=159, loc_error=10, FrameLinking=False, BatchOptimization=True)
     deform=Affine_Deform()
     #deform=Deform(random_deform=False, shift=None ) #,shear=None, scaling=None)
     DS1.load_copydataset_hdf5(deform)
@@ -393,7 +393,7 @@ if False: #% copy clusters
 
 if False: #% generate dataset beads
     DS1 = dataset_simulation(imgshape=[256, 512], loc_error=1.4, linked=True,
-                             pix_size=159, FrameLinking=False, FrameOptimization=False)
+                             pix_size=159, FrameLinking=False, BatchOptimization=False)
     deform=Deform(shear=None, scaling=None, random_deform=False)
     DS1.generate_dataset_beads(N=216, deform=deform)
     #DS1, DS2 = DS1.SplitDataset(linked=True)
@@ -408,7 +408,7 @@ if False: #% generate dataset beads
     
 if False: #% generate dataset clusters
     DS1 = dataset_simulation(imgshape=[256, 512], loc_error=10, linked=False, 
-                             pix_size=159, FrameLinking=False, FrameOptimization=True)
+                             pix_size=159, FrameLinking=False, BatchOptimization=True)
     deform=Deform(random_deform=False, shift=None ) #,shear=None, scaling=None)
     DS1.generate_dataset_clusters(deform=deform)
     #DS1 = DS1.SubsetRandom(subset=0.2, linked=True)

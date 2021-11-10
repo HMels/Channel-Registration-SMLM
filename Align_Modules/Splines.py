@@ -98,4 +98,4 @@ class CatmullRomSpline2D(_CatmullRomSplineBase):
             # sel_ControlPoints shape is [#evals, y-index, x-index, dims]
             return tf.reduce_sum((sel_ControlPoints * cy[:,:,:,None,None] * cx[:,:,None,:,None]), axis=(2,3))
         
-        else: ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
+        else: raise ValueError('Invalid input shape! ch1 has shape '+str(pts.shape) )
