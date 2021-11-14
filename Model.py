@@ -66,10 +66,16 @@ class Model(Registration):
             
         #% CatmullRomSplines
         if epochs[2] is not None:
+            self.execute_linked=True #%% Splines can only be optimized by pair-optimization
+            if not self.linked: self.link_dataset(maxDistance=pair_filter[0])
+            
+            # initializing and training the model
             ch1_input,ch2_input=self.InitializeSplines(gridsize=gridsize, edge_grids=edge_grids)
             self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
-            self.Train_Model(self.SplinesModel, lr=learning_rates[2], epochs=epochs[2], opt_fn=tf.optimizers.Adam, 
-                             ch1=ch1_input, ch2=ch2_input)        
+            self.Train_Model(self.SplinesModel, lr=learning_rates[2], epochs=epochs[2], opt_fn=tf.optimizers.Adagrad, 
+                             ch1=ch1_input, ch2=ch2_input)  
+            
+            # applying the model
             self.ControlPoints = self.SplinesModel.ControlPoints
             self.ch2.pos.assign(self.InputSplines(
                 self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2.pos)),

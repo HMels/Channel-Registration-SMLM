@@ -27,7 +27,9 @@ class dataset(Model):
         self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.BatchOptimization=BatchOptimization    # will the dataset be optimized per frame
-        self.subset=1       
+        self.subset=1      
+        self.counts_linked=None
+        self.counts_Neighbours=None
         Model.__init__(self)        
         
         
@@ -214,6 +216,8 @@ class dataset(Model):
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
     
     
+        
+    
     def SubsetFrames(self, begin_frames, end_frames):
     # select a certain subset of frames
         if end_frames<begin_frames: raise ValueError('Invalid input')
@@ -232,6 +236,10 @@ class dataset(Model):
         
     
     def SplitBatches(self, Nbatches, FrameLinking=False):
+        '''
+        Older function. Is not yet applicable to batch optimization as it does nothing with Neighbours_mat
+        '''
+        raise Exception('Should be applied to BatchOptimization')
         self.Nbatches=Nbatches
         if not FrameLinking:
             if self.linked:
@@ -282,7 +290,7 @@ class dataset(Model):
         
         N1=self.ch1.pos.shape[0]
         N2=self.ch2.pos.shape[0]
-        if linked:
+        if linked or self.Neighbours:
             if N1!=N2: raise Exception('Datasets are linked but not equal in size')
             mask1=np.ones(N1, dtype=bool)
             mask1[int(N1/2):]=False
@@ -320,6 +328,107 @@ class dataset(Model):
         return other
     
     
+    #%% AddFrames
+    def SubsetAddFrames(self, Nbatches, subset=1):
+    # will take a subset of frames and add them together 
+        idx1=tf.argsort(self.ch1.frame)
+        if not self.linked: idx2=tf.argsort(self.ch2.frame)
+        else: idx2=idx1
+        self.ch1.frame.assign(tf.gather(self.ch1.frame, idx1))
+        self.ch1.pos.assign(tf.gather(self.ch1.pos, idx1))
+        self.ch2.frame.assign(tf.gather(self.ch2.frame, idx2))
+        self.ch2.pos.assign(tf.gather(self.ch2.pos, idx2))
+        self.ch20linked.frame.assign(tf.gather(self.ch20linked.frame, idx2))
+        self.ch20linked.pos.assign(tf.gather(self.ch20linked.pos, idx2))
+        
+        # the indices of the frames we choose and the batches we place them in are generated
+        if subset==1: subset_frames=np.arange(1,tf.unique(self.ch1.frame)[0].shape[0]+1)
+        else: subset_frames=np.array(self.random_choice(tf.unique(self.ch1.frame)[0].shape[0], 
+                                                        int(tf.unique(self.ch1.frame)[0].shape[0]*subset)))+1
+        subset_batches=tf.sort(tf.range(0, subset_frames.shape[0], dtype=tf.float32)%Nbatches)
+        self.subset*=subset
+        
+        # first fill in the new positions
+        ch1_frame, ch2_frame, ch20linked_frame = ([],[],[])
+        ch1_pos, ch2_pos, ch20linked_pos = ([],[],[])
+        for fr in range(subset_frames.shape[0]):
+            idx1=np.sort(np.argwhere(self.ch1.frame==subset_frames[fr]))[:,0]
+            if not self.linked: idx2=np.sort(np.argwhere(self.ch2.frame==subset_frames[fr]))[:,0]
+            else: idx2=idx1
+            ch1_pos.append(tf.gather(self.ch1.pos,idx1))
+            ch2_pos.append(tf.gather(self.ch2.pos,idx2))
+            ch20linked_pos.append(tf.gather(self.ch20linked.pos,idx2))
+            ch1_frame.append(
+                subset_batches[fr]*
+                np.ones(idx1.shape[0],dtype=np.float32))
+            ch2_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
+            ch20linked_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
+            
+        del self.ch1, self.ch2, self.ch20linked
+        self.ch1 = Channel(tf.concat(ch1_pos,axis=0), tf.concat(ch1_frame,axis=0))
+        self.ch2 = Channel(tf.concat(ch2_pos,axis=0), tf.concat(ch2_frame,axis=0))
+        self.ch20linked = Channel(tf.concat(ch20linked_pos,axis=0), tf.concat(ch20linked_frame,axis=0))
+        self.subset*=subset
+        
+        # then we focus on the Neighbours
+        if self.Neighbours:
+            ch1NN_frame, ch2NN_frame = ([],[])
+            ch1NN_pos, ch2NN_pos = ([],[])
+            for fr in range(subset_frames.shape[0]):
+                idx1=np.sort(np.argwhere(self.ch1NN.frame==subset_frames[fr]))[:,0]
+                idx2=idx1#np.sort(np.argwhere(self.ch2NN.frame==subset_frames[fr]))[:,0]
+                print(idx1.shape, self.Neighbours_mat[fr].shape)
+                if idx1.shape[0]!=0:
+                    ch1NN_pos.append(tf.gather(self.ch1NN.pos,idx1))
+                    ch2NN_pos.append(tf.gather(self.ch2NN.pos,idx2))
+                    ch1NN_frame.append(subset_batches[fr]*np.ones(idx1.shape[0],dtype=np.float32))
+                    ch2NN_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
+                
+            del self.ch1NN, self.ch2NN
+            self.ch1NN = Channel(tf.concat(ch1NN_pos,axis=0), tf.concat(ch1NN_frame,axis=0))
+            self.ch2NN = Channel(tf.concat(ch2NN_pos,axis=0), tf.concat(ch2NN_frame,axis=0))
+            
+            Neighbours_mat=[]
+            if not isinstance(self.Neighbours_mat, list): 
+                raise Exception('Subset Add Frames not implemented as non framelinking neighbours yet')
+            for batch in tf.unique(subset_batches)[0]:
+                frames=np.concatenate(subset_frames[np.argwhere(subset_batches==batch)])-1
+                Neighbours_mat.append(self.AppendMat( np.array(self.Neighbours_mat)[frames]))
+            self.Neighbours_mat=Neighbours_mat
+        
+        if self.linked: self.counts_linked=[]
+        if self.Neighbours: self.counts_Neighbours=[]
+        for batch in tf.unique(subset_batches)[0]:
+            if self.linked: self.counts_linked.append(
+                    np.argwhere(self.ch1.frame==batch).shape[0]
+                    )
+            if self.Neighbours: self.counts_Neighbours.append(
+                    np.argwhere(self.ch1NN.frame==batch).shape[0]
+                    )
+            
+        for i in range(len(self.counts_Neighbours)):
+            if self.counts_Neighbours[i]!=self.Neighbours_mat[i].shape[1]:
+                print(self.counts_Neighbours[i],self.Neighbours_mat[i].shape[1])
+        
+    
+    def AppendMat(self, mat):
+    # creates a new matrix of all the submatrices added together vertically
+        len1, len2 = (0,0)
+        for m in mat: # calculate lenght of new matrix
+            if m.shape[1]!=0:
+                len1+=m.shape[0]
+                len2+=m.shape[1]
+        Mat=np.zeros((len1,len2), dtype=np.float32)
+        
+        len1, len2 = (0,0)
+        for m in mat: # fill in that matrix
+            if m.shape[1]!=0:
+                Mat[len1:(len1+m.shape[0]),len2:(len2+m.shape[1])]=m.numpy()
+                len1+=m.shape[0]
+                len2+=m.shape[1]
+        return tf.Variable(Mat, dtype=tf.float32, trainable=False)
+    
+    
     #%% pair_functions
     def link_dataset(self, maxDistance=None,FrameLinking=None):
         if maxDistance is None: maxDistance=np.float32(1000)
@@ -340,12 +449,25 @@ class dataset(Model):
             (pos1, frame1, pos2, frame2, pos20, frame20) = ([],[],[],[],[],[])
             if FrameLinking: ## Linking per frame
                 frame,_=tf.unique(self.ch1.frame)
+                self.counts_linked=[]
                 for fr in frame:
                     # Generate neighbouring indices per frame
                     framepos1=ch1_pos[ch1_frame==fr,:]
                     framepos2=ch2_pos[ch2_frame==fr,:]
                     framepos20=ch20_pos[ch20_frame==fr,:]
-                    idxlist=self.FindNeighbours_idx(framepos1, framepos2, maxDistance=maxDistance)
+                    
+                    with Context() as ctx: # loading all NN
+                        counts,indices = PostProcessMethods(ctx).FindNeighbors(framepos1, framepos2, maxDistance)
+                
+                    ## putting all idx in a list 
+                    (idxlist, pos, i) = ([], 0,0)
+                    for count in counts:
+                        idxlist.append( np.stack([
+                            i * np.ones([count], dtype=int),
+                            indices[pos:pos+count] 
+                            ]) )
+                        pos+=count
+                        i+=1
                     
                     for idx in idxlist:
                         if len(idx[0])!=0:
@@ -358,9 +480,23 @@ class dataset(Model):
                             pos1.append(posA)
                             pos2.append(posB[ np.argmin( np.sum((posA-posB)**2) ) ,:])
                             pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+                            
+                self.counts_linked.append(tf.reduce_sum(counts))
                 
             else: ## taking the whole dataset as a single batch
-                idxlist = self.FindNeighbours_idx(ch1_pos, ch2_pos, maxDistance=maxDistance)
+                with Context() as ctx: # loading all NN
+                    counts,indices = PostProcessMethods(ctx).FindNeighbors(ch1_pos, ch2_pos, maxDistance)
+            
+                ## putting all NNidx in a list 
+                (idxlist, pos, i) = ([], 0,0)
+                for count in counts:
+                    idxlist.append( np.stack([
+                        i * np.ones([count], dtype=int),
+                        indices[pos:pos+count] 
+                        ]) )
+                    pos+=count
+                    i+=1
+                    
                 for idx in idxlist:
                     if len(idx[0])!=0:
                         i=idx[0][0]
@@ -384,11 +520,90 @@ class dataset(Model):
             self.linked = True       
         
         
+    #%% Generate Neighbours
+    def find_neighbours(self, maxDistance=50, FrameLinking=None):
+    # Tries to generate neighbours according to all spots
+        print('Finding neighbours within a distance of',maxDistance,'nm.')
+        if FrameLinking is None: FrameLinking=self.FrameLinking
+        maxDistance=np.float32(maxDistance)
+        self.NN_maxDistance=maxDistance
+        
+        if FrameLinking:
+            frame,_=tf.unique(self.ch1.frame)
+            pos1, pos2, frame1=([],[],[])
+            self.counts_Neighbours,self.Neighbours_mat=([],[])
+            for fr in frame:
+                # Generate neighbouring indices per frame
+                framepos1=self.ch1.pos.numpy()[self.ch1.frame==fr,:]
+                framepos2=self.ch2.pos.numpy()[self.ch2.frame==fr,:]
+                with Context() as ctx: # loading all NN
+                    counts,indices = PostProcessMethods(ctx).FindNeighbors(framepos1, framepos2, maxDistance)
+            
+                pos,i=(0,0)
+                for count in counts:
+                    pos1.append(tf.gather(framepos1, i * np.ones([count], dtype=int)))
+                    pos2.append(tf.gather(framepos2, indices[pos:pos+count]))
+                    frame1.append( fr * np.ones([count], dtype=int) )
+                    pos+=count
+                    i+=1
+                    
+                self.counts_Neighbours.append(tf.reduce_sum(counts))
+                self.Neighbours_mat.append(self.GenerateNeighboursMat(framepos1, counts))
+                
+            if not self.BatchOptimization: self.Neighbours_mat=self.AppendMat(self.Neighbours_mat)
+        else:
+            with Context() as ctx: # loading all NN
+                counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
+                                                                       self.ch2.pos.numpy(), maxDistance)
+        
+            ## putting all NNidx in a list 
+            (pos1, pos2, frame1, pos, i) = ([], [], [], 0, 0)
+            for count in counts:
+                pos1.append(tf.gather(self.ch1.pos, i * np.ones([count], dtype=int)))
+                pos2.append(tf.gather(self.ch2.pos, indices[pos:pos+count]))
+                frame1.append(tf.gather(self.ch1.frame, i * np.ones([count], dtype=int)))
+                pos+=count
+                i+=1
+            
+            self.Neighbours_mat=self.GenerateNeighboursMat(counts)
+            
+        # load matrix as Channel class
+        self.ch1NN = Channel( tf.concat(pos1, axis=0), tf.concat(frame1, axis=0) )
+        self.ch2NN = Channel( tf.concat(pos2, axis=0), tf.concat(frame1, axis=0) )
+        self.Neighbours=True
+                
+        
+    def GenerateNeighboursMat(self, pos1=None, counts=None):
+        if counts is None:
+            with Context() as ctx: # loading all NN
+                counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
+                                                                       self.ch2.pos.numpy(), self.NN_maxDistance)
+        if pos1 is None:    
+            pos1=self.ch1.pos.numpy()
+            
+        Neighbours_mat=np.zeros([pos1.shape[0],tf.reduce_sum(counts)],dtype=np.float32)
+        pos, i=(0,0)
+        for count in counts:
+            Neighbours_mat[i,pos:pos+count]=1
+            pos+=count
+            i+=1
+        return tf.Variable(Neighbours_mat, trainable=False, dtype=tf.float32)
+    
+        
+    def random_choice(self,original_length, final_length):
+        if original_length<final_length: raise ValueError('Invalid Input')
+        lst=[]
+        while len(lst)<final_length:
+            r=np.random.randint(0,original_length)
+            if r not in lst: lst.append(r)
+        return lst
+    
+        
     #%% Filter
     def Filter(self, maxDistance):
     # The function for filtering both pairs and neigbhours 
         if self.linked: self.Filter_Pairs(maxDistance)
-        if self.Neighbours: self.Filter_Neighbours(maxDistance)
+        #if self.Neighbours: self.Filter_Neighbours(maxDistance)
         
         
     def Filter_Pairs(self, maxDistance=150):
@@ -418,7 +633,7 @@ class dataset(Model):
         else:
             print('WARNING: Filtering is turned off, will pass without filtering.')
         
-        
+        '''
     def Filter_Neighbours(self, maxDistance=150):
         if maxDistance is not None:
             print('Filtering localizations that have no Neighbours under',maxDistance,'nm...')
@@ -440,58 +655,4 @@ class dataset(Model):
             print('Out of the '+str(N0)+' Neighbours localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
         else:
             print('WARNING: Filtering is turned off, will pass without filtering.')
-        
-        
-    #%% Generate Neighbours
-    def find_neighbours(self, maxDistance=50, FrameLinking=None):
-    # Tries to generate neighbours according to all spots
-        print('Finding neighbours within a distance of',maxDistance,'nm.')
-        if FrameLinking is None: FrameLinking=self.FrameLinking
-        maxDistance=np.float32(maxDistance)
-        self.NN_maxDistance=maxDistance
-        
-        with Context() as ctx: # loading all NN
-            counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
-                                                                   self.ch2.pos.numpy(), maxDistance)
-    
-        ## putting all NNidx in a list 
-        (pos1, pos2, frame1, pos, i) = ([], [], [], 0, 0)
-        for count in counts:
-            pos1.append(tf.gather(self.ch1.pos, i * np.ones([count], dtype=int)))
-            pos2.append(tf.gather(self.ch2.pos, indices[pos:pos+count]))
-            frame1.append(tf.gather(self.ch1.frame, i * np.ones([count], dtype=int)))
-            pos+=count
-            i+=1
-        
-        # load matrix as Channel class
-        pos1=tf.concat(pos1, axis=0)
-        pos2=tf.concat(pos2, axis=0)
-        frame1=tf.concat(frame1, axis=0)
-        self.ch1NN = Channel( pos1, frame1 )
-        self.ch2NN = Channel( pos2, frame1 )
-        self.Neighbours=True
-            
-    
-    def FindNeighbours_idx(self, pos1, pos2, maxDistance):
-    # prints a list containing the neighbouring indices of two channels
-        with Context() as ctx: # loading all NN
-            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDistance)
-    
-        ## putting all NNidx in a list 
-        (idxlist, pos, i) = ([], 0,0)
-        for count in counts:
-            idxlist.append( np.stack([
-                i * np.ones([count], dtype=int),
-                indices[pos:pos+count] 
-                ]) )
-            pos+=count
-            i+=1
-        return idxlist
-    
-        
-    def random_choice(self,original_length, final_length):
-        lst=[]
-        while len(lst)<final_length:
-            r=np.random.randint(0,original_length)
-            if r not in lst: lst.append(r)
-        return lst
+            '''

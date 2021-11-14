@@ -35,12 +35,13 @@ class Registration(Plot):
         
         
     #%% Optimization functions
-    def Train_Model(self, model, lr=1, epochs=100, opt_fn=tf.optimizers.Adagrad, ch1=None, ch2=None):
+    def Train_Model(self, model, lr=1, epochs=100, opt_fn=tf.optimizers.Adagrad, ch1=None, ch2=None, opt=None):
         if epochs!=0 and epochs is not None:
             if self.BatchOptimization:
-                if self.execute_linked: batches,_=tf.unique(self.ch1.frame)
-                else: batches,_=tf.unique(self.ch1NN.frame)
-                self.Nbatches=batches.shape[0]
+                if self.execute_linked: batches=self.counts_linked
+                else: batches=self.counts_Neighbours
+                if batches is None: raise Exception('Batches have not been initialized yet!')
+                self.Nbatches=len(batches)
                 print('Training '+model.name+' Mapping with (lr,#it)='+str((lr,epochs))+' for '+str(self.Nbatches)+' Batches...')
             else:
                 print('Training '+model.name+' Mapping with (lr,#it)='+str((lr,epochs))+'...')
@@ -58,7 +59,7 @@ class Registration(Plot):
                     raise Exception('Dataset is not linked but no Neighbours have been generated yet')
     
             ## The training loop
-            opt=opt_fn(lr)
+            if opt is None: opt=opt_fn(lr)
             for i in range(epochs):
                 loss=self.train_step(model, epochs, opt, ch1, ch2, batches)  
                 if i%100==0 and i!=0: print('iteration='+str(i)+'/'+str(epochs))
@@ -68,17 +69,21 @@ class Registration(Plot):
     def train_step(self, model, epochs, opt, ch1, ch2, batches=None):
     # the optimization step
         if self.BatchOptimization:  ## work with batches of frames
+            pos, i=(0,0)
             for batch in batches: # work with batches 
-                idx1=tf.where(ch1.frame==batch)
+                idx1=tf.range(pos, pos+batch)[:,None]
                 pos1_fr=tf.gather_nd(ch1.pos,idx1)
                 pos2_fr=tf.gather_nd(ch2.pos,idx1)
                 
                 with tf.GradientTape() as tape: # calculate loss
-                    loss=self.loss_fn(model,pos1_fr,pos2_fr) 
+                    if self.execute_linked: loss=self.loss_fn(model,pos1_fr,pos2_fr) 
+                    else:  loss=self.loss_fn(model,pos1_fr,pos2_fr, self.Neighbours_mat[i]) 
                 
                 # calculate and apply gradients
                 grads = tape.gradient(loss, model.trainable_weights)
                 opt.apply_gradients(zip(grads, model.trainable_weights))
+                pos+=batch
+                i+=1
                 
         else :## take whole dataset as single batch
             with tf.GradientTape() as tape: # calculate loss
@@ -92,14 +97,19 @@ class Registration(Plot):
     
     
     #@tf.function(experimental_relax_shapes=True)
-    def loss_fn(self, model, pos1, pos2):
+    def loss_fn(self, model, pos1, pos2, Neighbours_mat=None):
     # The metric that will be optimized
         pos2 = model(pos2)
         if self.execute_linked:
             loss = tf.reduce_sum(tf.square(pos1-pos2))
         else:
-            loss = (tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(pos1-pos2),axis=-1)/(self.pix_size**2))))
-            print(loss)
+            #loss = tf.reduce_sum(tf.abs(pos1-pos2))
+            #loss = (tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(pos1-pos2),axis=-1)/(self.pix_size**2))))
+            if Neighbours_mat is None: Neighbours_mat=self.Neighbours_mat
+            loss=-tf.reduce_sum(tf.math.log(
+                Neighbours_mat @ tf.exp(-1*tf.reduce_sum(tf.square(pos1-pos2),axis=-1)/(self.pix_size**2))[:,None]
+                ))
+            print('loss='+str(loss))
         return loss
         
             
