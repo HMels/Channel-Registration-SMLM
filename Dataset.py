@@ -236,10 +236,6 @@ class dataset(Model):
         
     
     def SplitBatches(self, Nbatches, FrameLinking=False):
-        '''
-        Older function. Is not yet applicable to batch optimization as it does nothing with Neighbours_mat
-        '''
-        raise Exception('Should be applied to BatchOptimization')
         self.Nbatches=Nbatches
         if not FrameLinking:
             if self.linked:
@@ -259,21 +255,21 @@ class dataset(Model):
                 self.ch2NN.frame.assign(batches)
                 
         else: # keeps the positions that are in the same frame within the same frame
-            frame1=np.zeros((self.ch1.frame+1).shape[0])
-            frame2=np.zeros((self.ch2.frame+1).shape[0])
-            frame20=np.zeros((self.ch20linked.frame+1).shape[0])
+            frame1=np.zeros((self.ch1.frame).shape[0])
+            frame2=np.zeros((self.ch2.frame).shape[0])
+            frame20=np.zeros((self.ch20linked.frame).shape[0])
             if self.Neighbours:
-                frameNN1=np.zeros((self.ch1NN.frame+1).shape[0])
-                frameNN2=np.zeros((self.ch2NN.frame+1).shape[0])
+                frameNN1=np.zeros((self.ch1NN.frame).shape[0])
+                frameNN2=np.zeros((self.ch2NN.frame).shape[0])
 
-            for frame in tf.unique(self.ch1.frame+1)[0]:
+            for frame in tf.unique(self.ch1.frame)[0]:
                 batch=np.random.randint(0,Nbatches)                
-                frame1[np.argwhere(self.ch1.frame+1==frame)]=batch
-                frame2[np.argwhere(self.ch2.frame+1==frame)]=batch
-                frame20[np.argwhere(self.ch20linked.frame+1==frame)]=batch
+                frame1[np.argwhere(self.ch1.frame==frame)]=batch
+                frame2[np.argwhere(self.ch2.frame==frame)]=batch
+                frame20[np.argwhere(self.ch20linked.frame==frame)]=batch
                 if self.Neighbours:      
-                    frameNN1[np.argwhere(self.ch1NN.frame+1==frame)]=batch
-                    frameNN2[np.argwhere(self.ch2NN.frame+1==frame)]=batch
+                    frameNN1[np.argwhere(self.ch1NN.frame==frame)]=batch
+                    frameNN2[np.argwhere(self.ch2NN.frame==frame)]=batch
                     
             self.ch1.frame.assign(tf.Variable(frame1,dtype=tf.float32,trainable=False))
             self.ch2.frame.assign(tf.Variable(frame2,dtype=tf.float32,trainable=False))
@@ -377,17 +373,22 @@ class dataset(Model):
             for fr in range(subset_frames.shape[0]):
                 idx1=np.sort(np.argwhere(self.ch1NN.frame==subset_frames[fr]))[:,0]
                 idx2=idx1#np.sort(np.argwhere(self.ch2NN.frame==subset_frames[fr]))[:,0]
-                print(idx1.shape, self.Neighbours_mat[fr].shape)
-                if idx1.shape[0]!=0:
-                    ch1NN_pos.append(tf.gather(self.ch1NN.pos,idx1))
-                    ch2NN_pos.append(tf.gather(self.ch2NN.pos,idx2))
-                    ch1NN_frame.append(subset_batches[fr]*np.ones(idx1.shape[0],dtype=np.float32))
-                    ch2NN_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
+                '''
+                try:
+                    if idx1.shape[0]!=self.Neighbours_mat[fr].shape[1]: print(idx1.shape, self.Neighbours_mat[fr].shape)
+                except:
+                    print(idx1.shape, self.Neighbours_mat[fr].shape)
+                 '''   
+                #if idx1.shape[0]!=0:
+                ch1NN_pos.append(tf.gather(self.ch1NN.pos,idx1))
+                ch2NN_pos.append(tf.gather(self.ch2NN.pos,idx2))
+                ch1NN_frame.append(subset_batches[fr]*np.ones(idx1.shape[0],dtype=np.float32))
+                ch2NN_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
                 
             del self.ch1NN, self.ch2NN
             self.ch1NN = Channel(tf.concat(ch1NN_pos,axis=0), tf.concat(ch1NN_frame,axis=0))
             self.ch2NN = Channel(tf.concat(ch2NN_pos,axis=0), tf.concat(ch2NN_frame,axis=0))
-            
+            '''
             Neighbours_mat=[]
             if not isinstance(self.Neighbours_mat, list): 
                 raise Exception('Subset Add Frames not implemented as non framelinking neighbours yet')
@@ -395,7 +396,7 @@ class dataset(Model):
                 frames=np.concatenate(subset_frames[np.argwhere(subset_batches==batch)])-1
                 Neighbours_mat.append(self.AppendMat( np.array(self.Neighbours_mat)[frames]))
             self.Neighbours_mat=Neighbours_mat
-        
+            '''
         if self.linked: self.counts_linked=[]
         if self.Neighbours: self.counts_Neighbours=[]
         for batch in tf.unique(subset_batches)[0]:
@@ -405,27 +406,27 @@ class dataset(Model):
             if self.Neighbours: self.counts_Neighbours.append(
                     np.argwhere(self.ch1NN.frame==batch).shape[0]
                     )
-            
+        '''
         for i in range(len(self.counts_Neighbours)):
             if self.counts_Neighbours[i]!=self.Neighbours_mat[i].shape[1]:
                 print(self.counts_Neighbours[i],self.Neighbours_mat[i].shape[1])
-        
+        '''
     
     def AppendMat(self, mat):
     # creates a new matrix of all the submatrices added together vertically
         len1, len2 = (0,0)
         for m in mat: # calculate lenght of new matrix
-            if m.shape[1]!=0:
-                len1+=m.shape[0]
-                len2+=m.shape[1]
+            #if m.shape[1]!=0:
+            len1+=m.shape[0]
+            len2+=m.shape[1]
         Mat=np.zeros((len1,len2), dtype=np.float32)
         
         len1, len2 = (0,0)
         for m in mat: # fill in that matrix
-            if m.shape[1]!=0:
-                Mat[len1:(len1+m.shape[0]),len2:(len2+m.shape[1])]=m.numpy()
-                len1+=m.shape[0]
-                len2+=m.shape[1]
+            #if m.shape[1]!=0:
+            Mat[len1:(len1+m.shape[0]),len2:(len2+m.shape[1])]=m.numpy()
+            len1+=m.shape[0]
+            len2+=m.shape[1]
         return tf.Variable(Mat, dtype=tf.float32, trainable=False)
     
     
@@ -531,7 +532,7 @@ class dataset(Model):
         if FrameLinking:
             frame,_=tf.unique(self.ch1.frame)
             pos1, pos2, frame1=([],[],[])
-            self.counts_Neighbours,self.Neighbours_mat=([],[])
+            self.counts_Neighbours,self.Neighbours_mat=([],[])  ############
             for fr in frame:
                 # Generate neighbouring indices per frame
                 framepos1=self.ch1.pos.numpy()[self.ch1.frame==fr,:]
@@ -548,9 +549,9 @@ class dataset(Model):
                     i+=1
                     
                 self.counts_Neighbours.append(tf.reduce_sum(counts))
-                self.Neighbours_mat.append(self.GenerateNeighboursMat(framepos1, counts))
+                #self.Neighbours_mat.append(self.GenerateNeighboursMat(framepos1, counts))
                 
-            if not self.BatchOptimization: self.Neighbours_mat=self.AppendMat(self.Neighbours_mat)
+            #if not self.BatchOptimization: self.Neighbours_mat=self.AppendMat(self.Neighbours_mat)
         else:
             with Context() as ctx: # loading all NN
                 counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
@@ -565,14 +566,14 @@ class dataset(Model):
                 pos+=count
                 i+=1
             
-            self.Neighbours_mat=self.GenerateNeighboursMat(counts)
+            #self.Neighbours_mat=self.GenerateNeighboursMat(counts)
             
         # load matrix as Channel class
         self.ch1NN = Channel( tf.concat(pos1, axis=0), tf.concat(frame1, axis=0) )
         self.ch2NN = Channel( tf.concat(pos2, axis=0), tf.concat(frame1, axis=0) )
         self.Neighbours=True
                 
-        
+    '''
     def GenerateNeighboursMat(self, pos1=None, counts=None):
         if counts is None:
             with Context() as ctx: # loading all NN
@@ -588,7 +589,7 @@ class dataset(Model):
             pos+=count
             i+=1
         return tf.Variable(Neighbours_mat, trainable=False, dtype=tf.float32)
-    
+    '''
         
     def random_choice(self,original_length, final_length):
         if original_length<final_length: raise ValueError('Invalid Input')

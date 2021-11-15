@@ -69,47 +69,42 @@ class Registration(Plot):
     def train_step(self, model, epochs, opt, ch1, ch2, batches=None):
     # the optimization step
         if self.BatchOptimization:  ## work with batches of frames
-            pos, i=(0,0)
-            for batch in batches: # work with batches 
+            pos,loss=(0,0)
+            frame,_=tf.unique(ch1.frame) ###########
+            for i in range(len(batches)): # work with batches 
+                batch=batches[i]
                 idx1=tf.range(pos, pos+batch)[:,None]
                 pos1_fr=tf.gather_nd(ch1.pos,idx1)
                 pos2_fr=tf.gather_nd(ch2.pos,idx1)
                 
                 with tf.GradientTape() as tape: # calculate loss
-                    if self.execute_linked: loss=self.loss_fn(model,pos1_fr,pos2_fr) 
-                    else:  loss=self.loss_fn(model,pos1_fr,pos2_fr, self.Neighbours_mat[i]) 
-                
+                    if self.execute_linked: 
+                        loss+=tf.reduce_sum(tf.square(pos1_fr-model(pos2_fr)))
+                    else:  
+                        loss-=tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(pos1_fr-model(pos2_fr))/(self.pix_size**2),axis=-1)))
+                        #loss+=-tf.reduce_sum(tf.math.log((self.Neighbours_mat[i] @ 
+                        #       tf.exp(-1*tf.reduce_sum(tf.square(pos1_fr-model(pos2_fr)),axis=-1)
+                        #                            /(self.pix_size**2))[:,None])))
+                pos+=batch
                 # calculate and apply gradients
                 grads = tape.gradient(loss, model.trainable_weights)
                 opt.apply_gradients(zip(grads, model.trainable_weights))
-                pos+=batch
-                i+=1
                 
         else :## take whole dataset as single batch
             with tf.GradientTape() as tape: # calculate loss
-                loss=self.loss_fn(model,ch1.pos,ch2.pos) 
-            
+                if self.execute_linked:
+                    loss=tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos)))
+                else:
+                    loss=-tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos))/(self.pix_size**2),axis=-1)))
+                    #loss=-tf.reduce_sum(tf.math.log((self.Neighbours_mat @ 
+                    #      tf.exp(-1*tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos)),axis=-1)
+                    #                                 /(self.pix_size**2))[:,None])))
+                    
             # calculate and apply gradients
             grads = tape.gradient(loss, model.trainable_weights)
             opt.apply_gradients(zip(grads, model.trainable_weights))
         
-        return loss
-    
-    
-    #@tf.function(experimental_relax_shapes=True)
-    def loss_fn(self, model, pos1, pos2, Neighbours_mat=None):
-    # The metric that will be optimized
-        pos2 = model(pos2)
-        if self.execute_linked:
-            loss = tf.reduce_sum(tf.square(pos1-pos2))
-        else:
-            #loss = tf.reduce_sum(tf.abs(pos1-pos2))
-            #loss = (tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(pos1-pos2),axis=-1)/(self.pix_size**2))))
-            if Neighbours_mat is None: Neighbours_mat=self.Neighbours_mat
-            loss=-tf.reduce_sum(tf.math.log(
-                Neighbours_mat @ tf.exp(-1*tf.reduce_sum(tf.square(pos1-pos2),axis=-1)/(self.pix_size**2))[:,None]
-                ))
-            print('loss='+str(loss))
+        #print('loss='+str(loss))
         return loss
         
             

@@ -24,6 +24,7 @@ if False: #% Load Beads
     DS1.load_dataset_hdf5(align_rcc=False)
     
     ## optimization params
+    execute_linked=True
     learning_rates = [1000, 1, 1e-2]
     epochs = [100, None, 300]
     pair_filter = [None, 30, 30]
@@ -41,13 +42,14 @@ if False: #% Load Clusters
     DS1.link_dataset(maxDistance=maxDistance)
     
     ## optimization params
+    execute_linked=True
     learning_rates = [1000, .1, 1e-3]
     epochs = [100, None, 200]
     pair_filter = [250, 250, 250]
     gridsize=500
     
     
-if False: #% Load Excel Niekamp
+if True: #% Load Excel Niekamp
     maxDistance=1000
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                   pix_size=1, loc_error=1.4, mu=0.3,
@@ -63,6 +65,7 @@ if False: #% Load Excel Niekamp
     DS2.link_dataset(maxDistance=maxDistance)
     
     ## optimization params
+    execute_linked=True
     learning_rates = [1e3, .1, 1e-3]
     epochs = [100, None, 300]
     pair_filter = [250, 30, 30]
@@ -70,31 +73,34 @@ if False: #% Load Excel Niekamp
 
 
 if False: #% DNA-PAINT
-    maxDistance=2000
+    maxDistance=4000
     DS1 = dataset(['C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan1.hdf5', 
                    'C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan2.hdf5'],
                   pix_size=159, loc_error=None, mu=0,
-                  linked=False, FrameLinking=True, BatchOptimization=True)
+                  linked=False, FrameLinking=True, BatchOptimization=False)
     DS1.load_dataset_hdf5(align_rcc=True)
     #DS1=DS1.SubsetRandom(subset=0.1)
-    #DS1=DS1.SubsetWindow(subset=0.2)
+    #DS1=DS1.SubsetWindow(subset=0.5)
+    DS1, DS2=DS1.SplitDataset()
     #DS1.link_dataset(maxDistance=maxDistance)
-    DS1.find_neighbours(maxDistance=maxDistance, FrameLinking=True)
-    DS1.SubsetAddFrames(50, 1)
+    DS1.SplitBatches(10, FrameLinking=True)
     #DS2=DS1.SimpleShift(DS2, maxDistance=800)
+    DS1.find_neighbours(maxDistance=maxDistance, FrameLinking=True)
+    #DS1.SubsetAddFrames(50, 1)
     
     ## optimization params
-    learning_rates = [1000, 1e-3, 1e-3]
-    epochs = [10, 10, None]
+    execute_linked=False
+    learning_rates = [1e2, 1e-2, 1e-3]
+    epochs = [None, 100, None]
     pair_filter = [None, None, maxDistance]
     gridsize=1000
     
  
-if True: #% Load Excel Niekamp test clusters
+if False: #% Load Excel Niekamp test clusters
     maxDistance=1000
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                   pix_size=1, loc_error=1.4, mu=0.3,
-                  linked=False, FrameLinking=True, BatchOptimization=True)
+                  linked=False, FrameLinking=True, BatchOptimization=False)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
                   pix_size=1, loc_error=1.4, mu=0.3,
                   linked=False, FrameLinking=True)
@@ -105,18 +111,19 @@ if True: #% Load Excel Niekamp test clusters
     DS1.link_dataset(maxDistance=maxDistance)
     DS2.link_dataset(maxDistance=maxDistance)
     DS2=DS1.SimpleShift(DS2, maxDistance=maxDistance)
-    DS1.find_neighbours(FrameLinking=True,maxDistance=maxDistance)
-    DS1.SubsetAddFrames(5, 1)
+    DS1.find_neighbours(FrameLinking=False,maxDistance=maxDistance)
+    #DS1.SubsetAddFrames(5, 1)
     
     ## optimization params
+    execute_linked=False
     learning_rates = [1e2, 1e-3, 1e-3]
-    epochs = [None, 10, None]
-    pair_filter = [None, None, 100]
+    epochs = [None, 10, 300]
+    pair_filter = [None, 100, 100]
     gridsize=6500
     
     
 #%% running the model
-DS1.TrainRegistration(execute_linked=False, learning_rates=learning_rates, 
+DS1.TrainRegistration(execute_linked=execute_linked, learning_rates=learning_rates, 
                       epochs=epochs, pair_filter=pair_filter, gridsize=gridsize)
 
 if DS2 is not None:
