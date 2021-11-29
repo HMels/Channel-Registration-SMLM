@@ -13,6 +13,9 @@ import time
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredDrawingArea
 
+import sys
+sys.path.insert(0, 'C:/Users/Mels/OneDrive/MASTER_AP/MEP/24-channel-alignment')
+
 from dataset import dataset
 from dataset_simulation import dataset_simulation, dataset_copy, Deform, Affine_Deform
 from Channel import Channel
@@ -22,14 +25,16 @@ from Align_Modules.Polynomial3 import Polynomial3Model
 from Align_Modules.RigidBody import RigidBodyModel
 from Align_Modules.Splines import CatmullRomSpline2D
 from Align_Modules.Shift import ShiftModel
+plt.rc('font', size=17)
+
+def annotate_image(ax, text):
+    return None
+    #ax.text(-9000, 9000, text, ha='left', va='top',
+    #        size=20, weight='bold')
+    
 
 plt.close('all')
 #%% Functions 
-def annotate_image(ax, text):
-    ax.text(-9000, 9000, text, ha='left', va='top',
-            size=20, weight='bold')
-    
-    
 def gen_channel(DS1, precision=10, heatmap=False):
 # Generates the channels as matrix
     print('Generating Channels as matrix...')       
@@ -69,37 +74,42 @@ def generate_matrix(DS1, locs, heatmap=False):
     return channel
     
 
-def plt_channel(DS1, annotate=None):
+def plt_channel(DS1, figsize=(12,6), annotate=None):
     print('Plotting...')
     gen_channel(DS1,precision=DS1.pix_size)
     channel1=np.flipud(DS1.channel1)
     channel2=np.flipud(DS1.channel2)
-    label=['x2', 'x1']
         
     # plotting all channels
-    fig=plt.figure(figsize=(12,6)) 
+    fig=plt.figure(figsize=figsize) 
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
     ax1.imshow(channel1, extent = DS1.axis)
-    ax1.set_xlabel(label[0])
-    ax1.set_ylabel(label[1])
+    #ax1.set_xlabel(label[0])
+    #ax1.set_ylabel(label[1])
     ax1.set_xlim([-8000,8000])
     ax1.set_ylim([-8000,8000])
-    ax1.set_title('channel 2')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='channel 1')
     
     ax2.imshow(channel2, extent = DS1.axis)
-    ax2.set_xlabel(label[0])
-    ax2.set_ylabel(label[1])
+    #ax2.set_xlabel(label[0])
+    #ax2.set_ylabel(label[1])
     ax2.set_xlim([-8000,8000])
     ax2.set_ylim([-8000,8000])
-    ax2.set_title('channel 2')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='channel 2')
     
     if annotate is not None: annotate_image(ax1, annotate)
     plt.tight_layout()
 
 
-def plt_linking(DS1, maxDistance=2000, annotate=None):
+def plt_linking(DS1, maxDistance=2000, annotate=None, figsize=(12,6)):
     def addCircle(ax1, ax2, idx, precision, maxDistance=2000, txt='', txtax=None):
         ax1.add_patch(plt.Circle( (DS1.ch10.pos[idx,1]-precision/2, DS1.ch10.pos[idx,0]+precision/2),
                                                    maxDistance,  fc='none', ec='red' ))
@@ -115,17 +125,16 @@ def plt_linking(DS1, maxDistance=2000, annotate=None):
     gen_channel(DS1,precision=precision)
     channel1=np.flipud(DS1.channel1)
     channel2=np.flipud(DS1.channel20)
-    label=['x2', 'x1']
-        
+    
     # plotting all channels
-    fig=plt.figure(figsize=(12,6)) 
+    fig=plt.figure(figsize=figsize) 
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
     ## That point right bottom
-    addCircle(ax1, ax2, -3, precision, maxDistance, 'False Pair', ax2)
+    addCircle(ax1, ax2, -3, precision, maxDistance, '', ax2)
     ## Double linked point 
-    addCircle(ax1, ax2, 15, precision, maxDistance, 'False Pair', ax2)
+    addCircle(ax1, ax2, 15, precision, maxDistance, '', ax2)
     
     ax1.imshow(channel1, extent = DS1.axis)
     unique, unique_idx=tf.unique(DS1.ch1.frame[:])
@@ -142,13 +151,16 @@ def plt_linking(DS1, maxDistance=2000, annotate=None):
     for i in range(DS1.ch10.pos.shape[0]): # the positions that will be deleted
         if (not DS1.ch10.pos[i,0] in DS1.ch1.pos[:,0]) and (not DS1.ch10.pos[i,1] in DS1.ch1.pos[:,1]):
             ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='red')
-            addCircle(ax1, ax2, i, precision, maxDistance, 'No Neighbours', ax1)
+            addCircle(ax1, ax2, i, precision, maxDistance, '', ax1)
             
-    ax1.set_xlabel(label[0])
-    ax1.set_ylabel(label[1])
+    #ax1.set_xlabel(label[0])
+    #ax1.set_ylabel(label[1])
     ax1.set_xlim([-8000,8000])
     ax1.set_ylim([-8000,8000])
-    ax1.set_title('channel 1')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='channel 1')
     
     ax2.imshow(channel2, extent = DS1.axis)
     for i in range(DS1.ch20.pos.shape[0]): # the positions that will be deleted
@@ -157,96 +169,60 @@ def plt_linking(DS1, maxDistance=2000, annotate=None):
             #ax2.scatter( DS1.ch20.pos[i,1]-precision/2 , DS1.ch20.pos[i,0]+precision/2 , s=maxDistance,  facecolors='none', edgecolors='red' )
             #ax1.scatter( DS1.ch20.pos[i,1]-precision/2 , DS1.ch20.pos[i,0]+precision/2 , s=maxDistance,  facecolors='none', edgecolors='red' )
     
-    ax2.set_xlabel(label[0])
-    ax2.set_ylabel(label[1])
+    #ax2.set_xlabel(label[0])
+    #ax2.set_ylabel(label[1])
     ax2.set_xlim([-8000,8000])
     ax2.set_ylim([-8000,8000])
-    ax2.set_title('channel 2')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='channel 2')
     
-    '''
-    transFigure = fig.transFigure.inverted()
-    for i in range(DS1.ch1.pos.shape[0]):
-        coord1 = transFigure.transform(ax1.transData.transform(DS1.ch1.pos.numpy()[i,[1,0]]))
-        coord2 = transFigure.transform(ax2.transData.transform(DS1.ch2.pos.numpy()[i,[1,0]]))
-        line = lines.Line2D(
-            (coord1[0], coord2[0]),  # xdata
-            (coord1[1], coord2[1]),  # ydata
-            transform=fig.transFigure,
-            color="red",
-        )
-        fig.lines.append(line)
-    '''
     if annotate is not None: annotate_image(ax1, annotate)
     plt.tight_layout()
     plt.show() 
     
     
-def plt_shift(DS1, plotarrows=True, annotate=None):
-    print('Plotting...')
-    gen_channel(DS1,precision=DS1.pix_size)
-    channel2=np.flipud(DS1.channel2)
-    #channel20=np.flipud(DS1.channel20)
-    label=['x2', 'x1']
-
-    # plotting all channels
-    fig=plt.figure(figsize=(6,6)) 
-    ax1 = fig.add_subplot(111)
-    
-    '''
-    plt.imshow(channel20, extent = DS1.axis)
-    plt.xlabel(label[0])
-    plt.ylabel(label[1])
-    plt.title('original channel 2')
-    plt.tight_layout()
-
-    plt.subplot(122)
-    '''
-    ax1.imshow(channel2, extent = DS1.axis)
-    ax1.arrow(7500, 7500, DS1.ShiftModel.trainable_variables[0][1], 0,
-              width=.5, length_includes_head=False, facecolor='red', edgecolor='red', head_width=100)
-    ax1.arrow(7500, 7500, 0, DS1.ShiftModel.trainable_variables[0][0],
-              width=.5, length_includes_head=False, facecolor='red', edgecolor='red', head_width=100)
-    if plotarrows: # the positions
-        for i in range(DS1.ch1.pos.shape[0]):
-            ax1.arrow(DS1.ch20linked.pos[i,1],DS1.ch20linked.pos[i,0], DS1.ch2.pos[i,1]-DS1.ch20linked.pos[i,1],
-                      DS1.ch2.pos[i,0]-DS1.ch20linked.pos[i,0], width=.2, 
-                      length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
-    ax1.set_xlabel(label[0])
-    ax1.set_ylabel(label[1])
-    ax1.set_xlim([-8000,8000])
-    ax1.set_ylim([-8000,8000])
-    ax1.set_title('mapped channel 2')
-    
-    if annotate is not None: annotate_image(plt, annotate)
-    fig.tight_layout()
-    
-    
-def plt_filter(DS1, annotate=None):
+def plt_filter(DS1, annotate=None, figsize=(12,6), shift=None):
     print('Plotting...')
     precision=DS1.pix_size
     gen_channel(DS1,precision=precision)
     channel1=np.flipud(DS1.channel1)
     channel2=np.flipud(DS1.channel2)
-    label=['x2', 'x1']
         
     # plotting all channels
-    fig=plt.figure(figsize=(12,6)) 
+    fig=plt.figure(figsize=figsize) 
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
     ax1.imshow(channel1, extent = DS1.axis)
-    ax1.set_xlabel(label[0])
-    ax1.set_ylabel(label[1])
+    #ax1.set_xlabel(label[0])
+    #ax1.set_ylabel(label[1])
     ax1.set_xlim([-8000,8000])
     ax1.set_ylim([-8000,8000])
-    ax1.set_title('channel 1')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                 fc=(1., 0.8, 0.8)), s='channel 1')
     
     ax2.imshow(channel2, extent = DS1.axis)
-    ax2.set_xlabel(label[0])
-    ax2.set_ylabel(label[1])
+    #ax2.set_xlabel(label[0])
+    #ax2.set_ylabel(label[1])
     ax2.set_xlim([-8000,8000])
     ax2.set_ylim([-8000,8000])
-    ax2.set_title('channel 2')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                 fc=(1., 0.8, 0.8)), s='mapped channel 2')
+    
+    if shift is not None:
+        ax2.arrow(7500, 7500, shift[1], 0,
+                  width=.5, length_includes_head=False, facecolor='red', edgecolor='red', head_width=100)
+        ax2.arrow(7500, 7500, 0, shift[0],
+                  width=.5, length_includes_head=False, facecolor='red', edgecolor='red', head_width=100)
+        for i in range(DS1.ch20.pos.shape[0]):
+            ax2.arrow(DS1.ch20.pos[i,1]-shift[1],DS1.ch20.pos[i,0]-shift[0],shift[1],shift[0], width=.2, 
+                      length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
     
     if annotate is not None: annotate_image(ax1, annotate)
     fig.tight_layout()
@@ -260,12 +236,12 @@ def plt_filter(DS1, annotate=None):
             ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='red')
     
     
-def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plotmap=False, annotate=None):
+def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plotmap=False, annotate=None, figsize=(12,6)):
     print('Plotting...')
     gen_channel(DS1,precision=DS1.pix_size)
     channel20=np.flipud(DS1.channel20)
     channel2=np.flipud(DS1.channel2)
-    label=['x2', 'x1']
+    #label=['x2', 'x1']
     
     
     ## Horizontal Grid
@@ -276,28 +252,31 @@ def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plot
     #Hx1_grid = tf.range(0, tf.reduce_max(ControlPoints[:,:,0])+d_grid, delta=d_grid, dtype=tf.float32)
     #Hx2_grid = tf.range(0, tf.reduce_max(ControlPoints[:,:,1])+d_grid, delta=1/Ngrids, dtype=tf.float32)
     Hx1_grid = tf.range(-8000/DS1.gridsize, 8000/DS1.gridsize, delta=d_grid, dtype=tf.float32)*DS1.gridsize
-    Hx2_grid = tf.range(-8000/DS1.gridsize, 8000/DS1.gridsize, delta=1/Ngrids, dtype=tf.float32)*DS1.gridsize
+    Hx2_grid = tf.range(DS1.x1_min-10, 8000/DS1.gridsize, delta=1/Ngrids, dtype=tf.float32)*DS1.gridsize
     HGrid = tf.reshape(tf.stack(tf.meshgrid(Hx1_grid, Hx2_grid), axis=-1) , (-1,2)) 
 
     ## Vertical Grid
     #Vx1_grid = tf.range(0, tf.reduce_max(ControlPoints[:,:,0])+d_grid, delta=1/Ngrids, dtype=tf.float32)
     #Vx2_grid = tf.range(0, tf.reduce_max(ControlPoints[:,:,1])+d_grid, delta=d_grid, dtype=tf.float32)
-    Vx1_grid = tf.range(-8000/DS1.gridsize, 8000/DS1.gridsize, delta=1/Ngrids, dtype=tf.float32)*DS1.gridsize
+    Vx1_grid = tf.range(DS1.x2_min-10, 8000/DS1.gridsize, delta=1/Ngrids, dtype=tf.float32)*DS1.gridsize
     Vx2_grid = tf.range(-8000/DS1.gridsize, 8000/DS1.gridsize, delta=d_grid, dtype=tf.float32)*DS1.gridsize
     VGrid = tf.gather(tf.reshape(tf.stack(tf.meshgrid(Vx2_grid, Vx1_grid), axis=-1) , (-1,2)), [1,0], axis=1)
     
     
-    fig=plt.figure(figsize=(12,6)) 
+    fig=plt.figure(figsize=figsize) 
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
     ax1.imshow(channel20, extent = DS1.axis)
     gridmapping(ax1, DS1, HGrid, VGrid, Hx1_grid, Vx2_grid, Ngrids, plotarrows=False)
-    ax1.set_xlabel(label[0])
-    ax1.set_ylabel(label[1])
+    #ax1.set_xlabel(label[0])
+    #ax1.set_ylabel(label[1])
     ax1.set_xlim([-8000,8000])
     ax1.set_ylim([-8000,8000])
-    ax1.set_title('original channel 2')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='original channel 2')
     plt.tight_layout()
     
     HGrid = DS1.InputSplines(DS1.SplinesModel( DS1.InputSplines(HGrid) ), inverse=True)
@@ -305,11 +284,14 @@ def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plot
     
     ax2.imshow(channel2, extent = DS1.axis)
     gridmapping(ax2, DS1, HGrid, VGrid, Hx1_grid, Vx2_grid, Ngrids, plotarrows=True)
-    ax2.set_xlabel(label[0])
-    ax2.set_ylabel(label[1])
+    #ax2.set_xlabel(label[0])
+    #ax2.set_ylabel(label[1])
     ax2.set_xlim([-8000,8000])
     ax2.set_ylim([-8000,8000])
-    ax2.set_title('mapped channel 2')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.text(x=-7750,y=7750, va='top', bbox=dict(boxstyle="square",ec=(1., 0.5, 0.5),
+                                                          fc=(1., 0.8, 0.8)), s='mapped channel 2')
     
     if annotate is not None: annotate_image(ax1, annotate)
     plt.tight_layout()
@@ -412,12 +394,12 @@ DS1=copy_image(DS1)
 DS1.ShiftModel=ShiftModel()
 DS1.Train_Model(DS1.ShiftModel, lr=100, epochs=100, opt_fn=tf.optimizers.Adagrad)
 DS1.Transform_Model(DS1.ShiftModel)
-plt_shift(DS1, annotate='C')
+#plt_shift(DS1, annotate='C', figsize=(4.8,4.8))
 DS1=copy_image(DS1)
 
 # filter
 DS1.Filter(1500) 
-plt_filter(DS1, annotate='D')
+plt_filter(DS1, annotate='D', shift=DS1.ShiftModel.d.numpy())
 DS1=copy_image(DS1)
     
 # splines
@@ -436,10 +418,10 @@ DS1=copy_image(DS1)
 
 # filter
 DS1.Filter(200) 
-plt_filter(DS1, annotate='F')
+plt_filter(DS1, annotate='F',figsize=(12,6))
 
 #%% last image
-plt_channel(DS1, annotate='G')
+plt_channel(DS1, annotate='G',figsize=(12,6))
 '''
 # reload points
 np.random.seed(1)

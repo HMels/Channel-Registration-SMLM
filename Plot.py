@@ -117,14 +117,14 @@ class Plot:
         ax1.set_xlim(0)
         ax1.set_xlabel('Absolute error [nm]')
         ax1.set_ylabel('# of localizations')
-        ax1.legend()
+        ax1.legend(loc='upper right')
         
         ax2.set_title('Zoomed in on Mapping Error')
         ax2.set_ylim(0)
         ax2.set_xlim([0,xmax])
         ax2.set_xlabel('FOV [nm]')
         ax2.set_ylabel('Absolute Error')
-        ax2.legend()
+        ax2.legend(loc='upper right')
         
         if self.ch20linked.pos_all() is not None:
             ax3.set_title('Comparisson')
@@ -132,14 +132,14 @@ class Plot:
             ax3.set_xlim(0)
             ax3.set_xlabel('Absolute error [nm]')
             ax3.set_ylabel('# of localizations')
-            ax3.legend()
+            ax3.legend(loc='upper right')
         
             ax4.set_title('Comparisson')
             ax4.set_ylim(0)
             ax4.set_xlim([0,xmax])
             ax4.set_xlabel('FOV [nm]')
             ax4.set_ylabel('Absolute Error')
-            ax4.legend()
+            ax4.legend(loc='upper right')
           
         fig.tight_layout()
         fig.show()
@@ -164,7 +164,7 @@ class Plot:
         plt.xlim(0)
         plt.xlabel('error [nm]')
         plt.ylabel('# of localizations')
-        plt.legend()
+        plt.legend(loc='upper right')
         plt.tight_layout()
         
         
@@ -203,7 +203,7 @@ class Plot:
             
             ## plot how function should look like
             if error is not None:
-                sgm=np.sqrt(2)*error+mu
+                sgm=error+mu
                 opt_yx = func(x, 0, sgm)*Nx
                 opt_yy = func(x, 0, sgm)*Ny
                 ax[0].plot(x, opt_yx, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
@@ -216,13 +216,13 @@ class Plot:
         ax[0].set_xlim(-xlim,xlim)
         ax[0].set_xlabel('x-error [nm]')
         ax[0].set_ylabel('# of localizations')
-        ax[0].legend()
+        ax[0].legend(loc='upper right')
         
         ax[1].set_ylim([0,ymax])
         ax[1].set_xlim(-xlim,xlim)
         ax[1].set_xlabel('y-error [nm]')
         ax[1].set_ylabel('# of localizations')
-        ax[1].legend()
+        ax[1].legend(loc='upper right')
         fig.tight_layout()
         
         if fit_data:
@@ -236,7 +236,7 @@ class Plot:
         else: return None, None
         
         
-    def ErrorDistribution_r(self, nbins=30, xlim=31, error=None, mu=None, fit_data=True):
+    def ErrorDistribution_r(self, nbins=30, xlim=31, error=None, mu=None, fit_data=True, plot_on=True):
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         if mu is None: mu=0
         pos1=self.ch1.pos_all()
@@ -247,8 +247,9 @@ class Plot:
         dist=dist[np.argwhere(dist<xlim)]
         
         # plotting the histogram
-        plt.figure()
-        n=plt.hist(dist, range=[0,xlim], label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        if plot_on: plt.figure()
+        if plot_on: n=plt.hist(dist, range=[0,xlim], label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
+        else: n=np.histogram(dist, range=[0,xlim], bins=nbins)
         #plt.axvline(x=avg, label='average='+str(round(avg,2))+'[nm]')
         ymax = np.max(n[0])*1.1
         
@@ -267,23 +268,23 @@ class Plot:
             popt, pcov = curve_fit(func, xn, n[0]/N, p0=np.std(xn))
             x = np.linspace(0, xlim, 1000)
             y = func(x, *popt)*N
-            plt.plot(x, y, c='g',label=(r'fit: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(popt[0],2))+'nm'))
-        
+            if plot_on: plt.plot(x, y, c='g',label=(r'fit: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(popt[0],2))+'nm'))
+            
             ## plot how function should look like
             if error is not None:
-                sgm=np.sqrt(2)*error
+                sgm=error
                 y = func(x, sgm, mu)*N
-                plt.plot(x, y, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
+                if plot_on: plt.plot(x, y, c='b',label=(r'optimum: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(sgm,2))+'nm'))
                 if np.max(y)>ymax: ymax=np.max(y)*1.1
 
-        # Some extra plotting parameters
-        plt.ylim([0,ymax])
-        plt.xlim([0,xlim])
-        plt.xlabel('Absolute error [nm]')
-        plt.ylabel('# of localizations')
-        plt.legend()
-        plt.tight_layout()
-        
+        if plot_on: # Some extra plotting parameters
+            plt.ylim([0,ymax])
+            plt.xlim([0,xlim])
+            plt.xlabel('Absolute error [nm]')
+            plt.ylabel('# of localizations')
+            plt.legend(loc='upper right')
+            plt.tight_layout()
+            
         
         if fit_data:
             self.rdist_params=np.array([np.round(mu,2),np.round(popt[0],2)])
@@ -295,7 +296,7 @@ class Plot:
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorFOV(self, other=None, maxDistance=30, ps=5, cmap='seismic'):
+    def ErrorFOV(self, other=None, maxDistance=30, ps=5, cmap='seismic', figsize=None):
         ## Coupling Dataset1 if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         dist = self.ch1.pos_all()-self.ch2.pos_all()
@@ -310,56 +311,72 @@ class Plot:
             vmin=np.min((np.min(dist[:,0]),np.min(dist1[:,0]),np.min(dist[:,1]),np.min(dist1[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist1[:,0]),np.max(dist[:,1]),np.max(dist1[:,1])))
             
-            
-            fig, ax = plt.subplots(2,2)
+            if figsize is None: figsize=(12.5,12)
+            fig, ax = plt.subplots(2,2, figsize=figsize,sharex = True,sharey=True)
+            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             ax[0][0].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             #ax[0][0].set_xlabel('x-position [\u03bcm]')
             ax[0][0].set_ylabel('Set 1 Fiducials\ny-position [\u03bcm]')
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0][0])
+            #norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
+            #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0][0])
             ax[0][0].set_aspect('equal', 'box')
+            ax[0][0].set_title('x-error')
+            ax[0][0].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[0][0].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
             
             ax[0][1].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             #ax[0][1].set_xlabel('x-position [\u03bcm]')
             #ax[0][1].set_ylabel('y-position [\u03bcm]')
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[0][1])
+            #norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
+            #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='registration-error [nm]', ax=ax[0][1])
             ax[0][1].set_aspect('equal', 'box')
+            ax[0][1].set_title('y-error')
+            ax[0][1].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[0][1].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
         
             ax[1][0].scatter(other.ch1.pos[:,0]/1000, other.ch1.pos[:,1]/1000, s=ps, c=dist1[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][0].set_xlabel('x-position [\u03bcm]')
             ax[1][0].set_ylabel('Set 2 Fiducials\ny-position [\u03bcm]')
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[1][0])
+            #norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
+            #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='registration-error [nm]', ax=ax[1][0])
             ax[1][0].set_aspect('equal', 'box')
+            ax[1][0].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[1][0].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
             
             ax[1][1].scatter(other.ch1.pos[:,0]/1000, other.ch1.pos[:,1]/1000, s=ps, c=dist1[:,1], cmap=cmap, vmin=vmin, vmax=vmax)
             ax[1][1].set_xlabel('x-position [\u03bcm]')
             #ax[1][1].set_ylabel('y-position [\u03bcm]')
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[1][1])
             ax[1][1].set_aspect('equal', 'box')
+            ax[1][1].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[1][1].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
             fig.tight_layout()
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap),#shrink=2, 
+                         label='registration-error [nm]', ax=[ax[0][1],ax[1][1]])
             
         else:
+            if figsize is None: figsize=(14,6)
             vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
-            fig, ax = plt.subplots(1,2)
-            ax[0].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap)
-            ax[0].set_xlabel('x-position [\u03bcm]')
-            ax[0].set_ylabel('Batch 1\ny-position [\u03bcm]')
+            fig, ax = plt.subplots(1,2, figsize=figsize,sharex = False,sharey=False)
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='x-error [nm]', ax=ax[0])
+            ax[0].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap, norm=norm)
+            ax[0].set_xlabel('x-position [\u03bcm]')
+            ax[0].set_ylabel('y-position [\u03bcm]')
+            ax[0].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[0].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
+            #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax[0])
+            ax[0].set_title('x-error')
             ax[0].set_aspect('equal', 'box')
             
-            ax[1].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap)
+            ax[1].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap, norm=norm)
             ax[1].set_xlabel('x-position [\u03bcm]')
-            ax[1].set_ylabel('y-position [\u03bcm]')
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='y-error [nm]', ax=ax[1])
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='registration-error [nm]', ax=ax[1])
+            ax[1].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
+            ax[1].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
+            ax[1].set_title('y-error')
             ax[1].set_aspect('equal', 'box')
             fig.tight_layout()
-        
+        return fig,ax
     
         
     #%% Channel to matrix fn
@@ -418,15 +435,15 @@ class Plot:
             self.channel2=np.rot90(self.channel2)
             self.channel2_original=np.rot90(self.channel2_original)
             self.axis=np.concatenate((self.axis[2:],self.axis[:2]))
-            label=['x1','x2']
+            label=['x-position [\u03bcm]','y-position [\u03bcm]']
         else:
-            label=['x2', 'x1']
+            label=['y-position [\u03bcm]', 'x-position [\u03bcm]']
             
         # plotting all channels
         plt.figure()
         if self.ch20.pos_all() is not None: plt.subplot(131)
         else: plt.subplot(121)
-        plt.imshow(self.channel1, extent = self.axis)
+        plt.imshow(self.channel1, extent = self.axis/1000)
         plt.xlabel(label[0])
         plt.ylabel(label[1])
         plt.title('original channel 1')
@@ -434,7 +451,7 @@ class Plot:
         
         if self.ch20.pos_all() is not None: plt.subplot(132)
         else: plt.subplot(122)
-        plt.imshow(self.channel2, extent = self.axis)
+        plt.imshow(self.channel2, extent = self.axis/1000)
         plt.xlabel(label[0])
         plt.ylabel(label[1])
         plt.title('mapped channel 2')
@@ -442,24 +459,29 @@ class Plot:
         
         if self.ch20.pos_all() is not None: 
             plt.subplot(133)
-            plt.imshow(self.channel2_original, extent = self.axis)
+            plt.imshow(self.channel2_original, extent = self.axis/1000)
             plt.xlabel(label[0])
             plt.ylabel(label[1])
             plt.title('original channel 2')
             plt.tight_layout()
         
         
-    def plot_1channel(self, channel1=None):
+    def plot_1channel(self, channel1=None, figsize=None, title=None):
         if channel1 is None: channel1=self.channel1
         if channel1.shape[1]>channel1.shape[0]: channel1=np.rot90(channel1)
         # plotting all channels
-        plt.figure()
-        plt.imshow(channel1, extent = self.axis)
-        plt.xlabel('x1')
-        plt.ylabel('x2')
-        plt.title('Single Channel view')
-        plt.tight_layout()
+        if figsize is None: fig=plt.figure() 
+        else:  fig=plt.figure(figsize=figsize) 
+        ax = fig.add_subplot(111)
         
+        ax.imshow(channel1, extent = self.axis/1000)
+        ax.set_xlabel('x-position [\u03bcm]')
+        ax.set_ylabel('y-position [\u03bcm]')
+        if title is None: ax.set_title('Single Channel view')
+        else: ax.set_title(title)
+        fig.tight_layout()
+        return fig, ax
+    
         
     #%% Plotting the Grid
     def PlotSplineGrid(self, ch1=None, ch2=None, ch20=None, locs_markersize=25,
@@ -548,7 +570,7 @@ class Plot:
             i+=nn
             j+=1
         
-        plt.legend()
+        plt.legend(loc='upper right')
         plt.tight_layout()
             
 
@@ -644,5 +666,5 @@ class Plot:
                 i+=nn
                 j+=1
             
-            plt.legend()
+            plt.legend(loc='upper right')
             plt.tight_layout()

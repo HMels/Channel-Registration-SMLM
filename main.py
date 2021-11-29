@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import copy
 import time
+import numpy as np
 
 from dataset import dataset
 from dataset_simulation import dataset_simulation, dataset_copy, Deform, Affine_Deform
@@ -31,31 +32,31 @@ if False: #% Load Beads
     gridsize=500
 
 
-if False: #% Load Clusters
+if True: #% Load FRET clusters
     maxDistance=800
     DS1 = dataset(['C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5', 
                    'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5'],
-                  pix_size=159, loc_error=10, mu=0,
-                  linked=False, FrameLinking=True, BatchOptimization=False)
+                  pix_size=159, loc_error=10, mu=0, coloc_error=np.sqrt(2)*10,
+                  imgshape=[256,512], linked=False, FrameLinking=True, BatchOptimization=False)
     DS1.load_dataset_hdf5(align_rcc=False)
     DS1, DS2=DS1.SplitDataset()   
     DS1.link_dataset(maxDistance=maxDistance)
     
     ## optimization params
     execute_linked=True
-    learning_rates = [1000, .1, 1e-3]
+    learning_rates = [1000, .1, 2e-3]
     epochs = [100, None, 200]
     pair_filter = [250, 250, 250]
-    gridsize=500
+    gridsize=100
     
     
-if True: #% Load Excel Niekamp
+if False: #% Load Excel Niekamp
     maxDistance=1000
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3,
+                  pix_size=1, loc_error=1.4, mu=0.3, coloc_error=np.sqrt(2)*1.4,
                   linked=False, FrameLinking=True, BatchOptimization=False)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3,
+                  pix_size=1, loc_error=1.4, mu=0.3, coloc_error=np.sqrt(2)*1.4,
                   linked=False, FrameLinking=True)
     DS1.load_dataset_excel()
     DS2.load_dataset_excel()
@@ -140,8 +141,8 @@ if not DS1.linked:
 
 ## DS1
 DS1.ErrorPlot(nbins=nbins)
-DS1.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS1.loc_error, fit_data=True)
-DS1.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS1.loc_error, mu=DS1.mu, fit_data=True)
+DS1.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS1.coloc_error, fit_data=True)
+DS1.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS1.coloc_error, mu=DS1.mu, fit_data=True)
 
 
 #%% DS2 output
@@ -151,8 +152,8 @@ if DS2 is not None:
             
     DS2.Filter(pair_filter[1])
     DS2.ErrorPlot(nbins=nbins)
-    DS2.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS2.loc_error)
-    DS2.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS2.loc_error, mu=DS2.mu)
+    DS2.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS2.coloc_error)
+    DS2.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS2.coloc_error, mu=DS2.mu)
 
 
 #%% DS1 vs DS2

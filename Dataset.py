@@ -16,11 +16,13 @@ from Model import Model
 
 #%% Dataset
 class dataset(Model):
-    def __init__(self, path, pix_size=1, loc_error=10, mu=0, linked=False, imgshape=[512, 512], 
+    def __init__(self, path, pix_size=1, loc_error=10, mu=0, coloc_error=None,
+                 linked=False, imgshape=[512, 512], 
                  FrameLinking=True, BatchOptimization=False):
         self.path=path            # the string or list containing the strings of the file location of the dataset
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.loc_error=loc_error  # localization error
+        self.coloc_error=coloc_error if coloc_error is not None else np.sqrt(2)*loc_error
         self.mu=mu
         self.imgshape=imgshape    # number of pixels of the dataset
         self.linked=linked        # is the data linked/paired?

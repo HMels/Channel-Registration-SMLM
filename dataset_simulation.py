@@ -41,6 +41,8 @@ class dataset_simulation(dataset):
         self.ch2 = Channel(pos=pos2, frame=np.ones(pos2.shape[0]))
         # Copy channel
         self.ch20=copy.deepcopy(self.ch2)
+        self.ch20linked=copy.deepcopy(self.ch2)
+        self.ch10=copy.deepcopy(self.ch1)
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image()
         
@@ -57,6 +59,8 @@ class dataset_simulation(dataset):
         self.ch2 = Channel(pos=pos2, frame=np.ones(pos2.shape[0]))
         # Copy channel
         self.ch20=copy.deepcopy(self.ch2)
+        self.ch20linked=copy.deepcopy(self.ch2)
+        self.ch10=copy.deepcopy(self.ch1)
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image()
         
@@ -74,6 +78,8 @@ class dataset_simulation(dataset):
         self.ch2 = Channel(pos=pos2, frame=np.random.choice(np.arange(0,10),(pos2.shape[0])))
         # Copy channel
         self.ch20=copy.deepcopy(self.ch2)
+        self.ch20linked=copy.deepcopy(self.ch2)
+        self.ch10=copy.deepcopy(self.ch1)
         self.img, self.imgsize, self.mid = self.imgparams() 
         self.center_image() 
                
