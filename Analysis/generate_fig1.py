@@ -25,7 +25,7 @@ from Align_Modules.Polynomial3 import Polynomial3Model
 from Align_Modules.RigidBody import RigidBodyModel
 from Align_Modules.Splines import CatmullRomSpline2D
 from Align_Modules.Shift import ShiftModel
-plt.rc('font', size=17)
+plt.rc('font', size=25)
 
 def annotate_image(ax, text):
     return None
@@ -143,14 +143,14 @@ def plt_linking(DS1, maxDistance=2000, annotate=None, figsize=(12,6)):
     for i in range(idx_lst.shape[0]): # the linked pairs
         idx=idx_lst[i]
         frame=DS1.ch2.frame[idx]
-        ax1.annotate(str(count), (DS1.ch1.pos[idx,1], DS1.ch1.pos[idx,0]), color='red')
+        ax1.annotate(str(count), (DS1.ch1.pos[idx,1], DS1.ch1.pos[idx,0]), color='green')
         if frame!=DS1.ch2.frame[idx_lst[i-1]]:
-            ax2.annotate(str(count), (DS1.ch2.pos[idx,1], DS1.ch2.pos[idx,0]), color='red')
+            ax2.annotate(str(count), (DS1.ch2.pos[idx,1], DS1.ch2.pos[idx,0]), color='green')
             count+=1
             
     for i in range(DS1.ch10.pos.shape[0]): # the positions that will be deleted
         if (not DS1.ch10.pos[i,0] in DS1.ch1.pos[:,0]) and (not DS1.ch10.pos[i,1] in DS1.ch1.pos[:,1]):
-            ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='red')
+            ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='yellow')
             addCircle(ax1, ax2, i, precision, maxDistance, '', ax1)
             
     #ax1.set_xlabel(label[0])
@@ -165,7 +165,7 @@ def plt_linking(DS1, maxDistance=2000, annotate=None, figsize=(12,6)):
     ax2.imshow(channel2, extent = DS1.axis)
     for i in range(DS1.ch20.pos.shape[0]): # the positions that will be deleted
         if (not DS1.ch20.pos[i,0] in DS1.ch2.pos[:,0]) and (not DS1.ch20.pos[i,1] in DS1.ch2.pos[:,1]):
-            ax2.plot(DS1.ch20.pos[i,1]-precision/2, DS1.ch20.pos[i,0]+precision/2, 'x', color='red')
+            ax2.plot(DS1.ch20.pos[i,1]-precision/2, DS1.ch20.pos[i,0]+precision/2, 'x', color='yellow')
             #ax2.scatter( DS1.ch20.pos[i,1]-precision/2 , DS1.ch20.pos[i,0]+precision/2 , s=maxDistance,  facecolors='none', edgecolors='red' )
             #ax1.scatter( DS1.ch20.pos[i,1]-precision/2 , DS1.ch20.pos[i,0]+precision/2 , s=maxDistance,  facecolors='none', edgecolors='red' )
     
@@ -230,10 +230,10 @@ def plt_filter(DS1, annotate=None, figsize=(12,6), shift=None):
     
     for i in range(DS1.ch20.pos.shape[0]): # the positions that will be deleted
         if (not DS1.ch20.pos[i,0] in DS1.ch2.pos[:,0]) and (not DS1.ch20.pos[i,1] in DS1.ch2.pos[:,1]):
-            ax2.plot(DS1.ch20.pos[i,1]-precision/2, DS1.ch20.pos[i,0]+precision/2, 'x', color='red')
+            ax2.plot(DS1.ch20.pos[i,1]-precision/2, DS1.ch20.pos[i,0]+precision/2, 'x', color='yellow')
     for i in range(DS1.ch10.pos.shape[0]): # the positions that will be deleted
         if (not DS1.ch10.pos[i,0] in DS1.ch1.pos[:,0]) and (not DS1.ch10.pos[i,1] in DS1.ch1.pos[:,1]):
-            ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='red')
+            ax1.plot(DS1.ch10.pos[i,1]-precision/2, DS1.ch10.pos[i,0]+precision/2, 'x', color='yellow')
     
     
 def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plotmap=False, annotate=None, figsize=(12,6)):

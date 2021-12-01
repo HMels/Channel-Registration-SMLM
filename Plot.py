@@ -296,7 +296,7 @@ class Plot:
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorFOV(self, other=None, maxDistance=30, ps=5, cmap='seismic', figsize=None):
+    def ErrorFOV(self, other=None, maxDistance=30, ps=5, cmap='seismic', figsize=None, placement='right'):
         ## Coupling Dataset1 if not done already
         if not self.linked: raise Exception('Dataset should first be linked before registration errors can be derived!')
         dist = self.ch1.pos_all()-self.ch2.pos_all()
@@ -311,7 +311,7 @@ class Plot:
             vmin=np.min((np.min(dist[:,0]),np.min(dist1[:,0]),np.min(dist[:,1]),np.min(dist1[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist1[:,0]),np.max(dist[:,1]),np.max(dist1[:,1])))
             
-            if figsize is None: figsize=(12.5,12)
+            if figsize is None: figsize=(15,12)
             fig, ax = plt.subplots(2,2, figsize=figsize,sharex = True,sharey=True)
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             ax[0][0].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -351,13 +351,13 @@ class Plot:
             ax[1][1].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
             fig.tight_layout()
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap),#shrink=2, 
-                         label='registration-error [nm]', ax=[ax[0][1],ax[1][1]])
+                         label='registration-error [nm]', ax=[ax[0][1],ax[1][1]], location=placement)
             
         else:
             if figsize is None: figsize=(14,6)
             vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
             vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
-            fig, ax = plt.subplots(1,2, figsize=figsize,sharex = False,sharey=False)
+            fig, ax = plt.subplots(1,2, figsize=figsize,sharex = False,sharey=False,constrained_layout=True)
             norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             ax[0].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,0], cmap=cmap, norm=norm)
             ax[0].set_xlabel('x-position [\u03bcm]')
@@ -370,12 +370,19 @@ class Plot:
             
             ax[1].scatter(self.ch1.pos_all()[:,0]/1000, self.ch1.pos_all()[:,1]/1000, s=ps, c=dist[:,1], cmap=cmap, norm=norm)
             ax[1].set_xlabel('x-position [\u03bcm]')
-            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='registration-error [nm]', ax=ax[1])
             ax[1].set_xlim([-self.imgshape[0]/2*self.pix_size/1000,self.imgshape[0]/2*self.pix_size/1000])
             ax[1].set_ylim([-self.imgshape[1]/2*self.pix_size/1000,self.imgshape[1]/2*self.pix_size/1000])
             ax[1].set_title('y-error')
             ax[1].set_aspect('equal', 'box')
-            fig.tight_layout()
+            #fig.tight_layout()
+            if placement=='bottom': 
+                shrink=0.8 
+                aspect=20
+            else: 
+                shrink=.8
+                aspect=40
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label='registration-error [nm]',
+                         ax=ax[:2], shrink=shrink, aspect=aspect, location=placement)
         return fig,ax
     
         

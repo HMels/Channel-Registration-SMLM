@@ -24,6 +24,7 @@ from Align_Modules.Shift import ShiftModel
 class Model(Registration):
     def __init__(self, execute_linked=True):     
         ## Models
+        self.AffineMat=None #LLS affine
         self.AffineModel = None
         self.Polynomial3Model = None
         self.RigidBodyModel = None
@@ -44,46 +45,23 @@ class Model(Registration):
         
         
     #%% model
-    def TrainRegistration(self, execute_linked=None, learning_rates=[1e3,.1,1e-3], epochs=[100,100,100], pair_filter=[250,30],
+    def TrainRegistration(self, execute_linked=None, learning_rate=1e-3, epochs=100, pair_filter=[250,30],
                          gridsize=3000, edge_grids=1):
         if execute_linked is not None: self.execute_linked=execute_linked
         else: self.execute_linked=self.linked
+        if execute_linked and not self.linked: raise Exception('Tried to execute linked but dataset has not been linked yet!')
         
         start=time.time()
-        
-        #% Shift Transform
-        self.ShiftModel=ShiftModel()
-        self.Train_Model(self.ShiftModel, lr=learning_rates[0], epochs=epochs[0], opt_fn=tf.optimizers.Adagrad)
-        self.Transform_Model(self.ShiftModel)
-        
+        self.AffineLLS()
         if pair_filter[0] is not None:
             self.Filter(pair_filter[0]) 
             
-        #% Affine Transform
-        self.AffineModel=AffineModel()
-        self.Train_Model(self.AffineModel, lr=learning_rates[1], epochs=epochs[1], opt_fn=tf.optimizers.Adam)
-        self.Transform_Model(self.AffineModel)
-            
         #% CatmullRomSplines
-        if epochs[2] is not None:
+        if epochs is not None:
             self.execute_linked=True #%% Splines can only be optimized by pair-optimization
             if not self.linked: self.link_dataset(maxDistance=pair_filter[2])
-            
-            # initializing and training the model
-            ch1_input,ch2_input=self.InitializeSplines(gridsize=gridsize, edge_grids=edge_grids)
-            self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
-            self.Train_Model(self.SplinesModel, lr=learning_rates[2], epochs=epochs[2], opt_fn=tf.optimizers.SGD, 
-                             ch1=ch1_input, ch2=ch2_input)  
-            
-            # applying the model
-            self.ControlPoints = self.SplinesModel.ControlPoints
-            self.ch2.pos.assign(self.InputSplines(
-                self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2.pos)),
-                inverse=True))
-            if self.Neighbours:
-                self.ch2NN.pos.assign(self.InputSplines(
-                    self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2NN.pos)),
-                    inverse=True))
+            self.Train_Splines(learning_rate, epochs, gridsize, edge_grids)
+            self.Apply_Splines()
         #self.PlotSplineGrid(plotarrows=False)
             
         if pair_filter[1] is not None:
@@ -92,13 +70,12 @@ class Model(Registration):
         
         
     def ApplyRegistration(self):
-            if self.ShiftModel is not None: self.Transform_Model(self.ShiftModel)
-            if self.AffineModel is not None: self.Transform_Model(self.AffineModel)
-            if self.RigidBodyModel is not None: self.Transform_Model(self.RigidBodyModel)
-            if self.Polynomial3Model is not None: self.Transform_Model(self.Polynomial3Model)
-            if self.SplinesModel is not None: self.ch2.pos.assign(self.InputSplines(
-                    self.Transform_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2.pos)),
-                    inverse=True))
+            if self.AffineMat is not None: self.Apply_Affine()
+            if self.ShiftModel is not None: self.Apply_Model(self.ShiftModel)
+            if self.AffineModel is not None: self.Apply_Model(self.AffineModel)
+            if self.RigidBodyModel is not None: self.Apply_Model(self.RigidBodyModel)
+            if self.Polynomial3Model is not None: self.Apply_Model(self.Polynomial3Model)
+            if self.SplinesModel is not None: self.Apply_Splines()
         
         
     #%% SimpleShift
@@ -138,6 +115,7 @@ class Model(Registration):
         
     #%% miscaleneous fn
     def copy_models(self, other):
+        self.AffineMat = copy.deepcopy(other.AffineMat)
         self.AffineModel = copy.deepcopy(other.AffineModel)
         self.Polynomial3Model = copy.deepcopy(other.Polynomial3Model)
         self.RigidBodyModel = copy.deepcopy(other.RigidBodyModel)

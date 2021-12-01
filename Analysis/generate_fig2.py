@@ -81,6 +81,7 @@ if True: ## Grid
     deform_gridsize=1.5*gridsize
     loc_error=1.4
     N_it=1
+    gridsize=3000
     DS0 = dataset_simulation(imgshape=[512, 512], loc_error=loc_error, linked=True,
                              pix_size=159, FrameLinking=False, BatchOptimization=False)
     deform=Affine_Deform(A=np.array([[ 1.0031357 ,  0.00181658, -1.3986971], 
@@ -94,7 +95,6 @@ if True: ## Grid
     learning_rates = [1e3, .1, 1e-3]
     epochs = [100, None, 300]
     pair_filter = [None, None, 20]
-    gridsize=3000
     figsize1=(16.5,7)
 
 

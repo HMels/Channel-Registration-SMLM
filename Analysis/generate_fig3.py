@@ -66,7 +66,7 @@ def plot_frame(DS1, frame=None, annotate=None, label=False):
     
     temp.generate_channel(precision=temp.pix_size)
     channel1=np.flipud(temp.channel1)
-    fig, ax=temp.plot_1channel(channel1, figsize=(6,6), title='')
+    fig, ax=temp.plot_1channel(channel1, figsize=(9,9), title='')
     
     if annotate is not None: annotate_image(ax, annotate, displacement=[-6000, 1000])
     if label and frame is not None: 
@@ -96,7 +96,7 @@ def ErrorDistribution_r(DS1, fig=None,ax=None, nbins=30, xlim=31, error=None, mu
     dist=dist[np.argwhere(dist<xlim)]
     
     # plotting the histogram
-    if fig is None: fig=plt.figure(figsize=(12,6)) 
+    if fig is None: fig=plt.figure(figsize=(12,3)) 
     if ax is None: ax = fig.add_subplot(111)
     
     n=ax.hist(dist, range=[0,xlim], label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
@@ -278,7 +278,7 @@ def plt_grid(DS1, fig=None,ax=None, locs_markersize=25, d_grid=.1, Ngrids=1, plo
                                 window[0,1]/1000-window[0,0]/1000, ec='red', fc='none', zorder=10))
     
 plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=4, plotmap=False, window=None, annotate='D') ## fig 1d
-plot_frame(DS1,1, annotate='E') ## fig 1e
+#plot_frame(DS1,1, annotate='E') ## fig 1e
 
 
 #%% fig 1f
@@ -343,11 +343,12 @@ def ErrorDistribution_import(pair, fig=None,ax=None, nbins=30, xlim=31, error=No
     return fig, ax
 
 
-fig=plt.figure(figsize=(18,6))
-ax1 = fig.add_subplot(131)
+fig=plt.figure(figsize=(10,10))
+ax1 = fig.add_subplot(111)
 fig, ax1=ErrorDistribution_r(DS1, fig, ax1, nbins=nbins, xlim=pair_filter[2], error=DS1.loc_error, mu=DS1.mu, fit_data=True, annotate='F', annotate_dist=[-4,100])
 
-ax2 = fig.add_subplot(132)
+fig=plt.figure(figsize=(10,10))
+ax2 = fig.add_subplot(111)
 DS2.reload_dataset()
 DS2.copy_models(DS1) ## Copy all mapping parameters
 DS2.ApplyRegistration()
@@ -356,7 +357,8 @@ if not DS2.linked:
 DS2.Filter(pair_filter[1])
 fig, ax2=ErrorDistribution_r(DS2, fig, ax2, nbins=nbins, xlim=pair_filter[2], error=DS2.loc_error, mu=DS2.mu, fit_data=True)
 
-ax3 = fig.add_subplot(133)
+fig=plt.figure(figsize=(10,10))
+ax3 = fig.add_subplot(111)
 DS3 = load_dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration_After_Mapping/Set2/set2_beads_locs.csv')
 fig, ax3=ErrorDistribution_import(DS3, fig, ax3, nbins=nbins, xlim=pair_filter[2], error=DS1.loc_error, mu=DS1.mu, fit_data=True)
 ylim=np.max([ax1.get_ylim()[1],ax2.get_ylim()[1],ax3.get_ylim()[1]])
@@ -372,7 +374,7 @@ def ErrorDistribution_xy(DS1, nbins=30, xlim=31, error=None, mu=None, fit_data=T
         pos1=DS1.ch1.pos_all()
         pos2=DS1.ch2.pos_all()
             
-        fig, ax = plt.subplots(1,2,figsize=(12,6))
+        fig, ax = plt.subplots(1,2,figsize=(15,7))
         distx=pos1[:,0]-pos2[:,0]
         disty=pos1[:,1]-pos2[:,1]
         mask=np.where(distx<xlim,True, False)*np.where(disty<xlim,True,False)
@@ -429,5 +431,5 @@ def ErrorDistribution_xy(DS1, nbins=30, xlim=31, error=None, mu=None, fit_data=T
 ErrorDistribution_xy(DS2, nbins=nbins, xlim=pair_filter[2], error=DS2.loc_error, annotate='G')
 
 ##fig1h
-fig,axFOV=DS2.ErrorFOV(None, figsize=(14,6))
+fig,axFOV=DS2.ErrorFOV(None, figsize=(15,7),placement='right')
 annotate_image(axFOV[0], 'H', displacement=[-10,2])

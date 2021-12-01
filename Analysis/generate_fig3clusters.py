@@ -118,7 +118,7 @@ def ErrorDistribution_r(DS1, fig=None,ax=None, nbins=30, xlim=31, error=None, mu
     dist=dist[np.argwhere(dist<xlim)]
     
     # plotting the histogram
-    if fig is None: fig=plt.figure(figsize=(12,6)) 
+    if fig is None: fig=plt.figure(figsize=(12,4)) 
     if ax is None: ax = fig.add_subplot(111)
     
     n=ax.hist(dist, range=[0,xlim], label='N='+str(pos1.shape[0]), alpha=.8, edgecolor='red', color='tab:orange', bins=nbins)
@@ -212,7 +212,7 @@ def plt_grid(DS1, fig=None,ax=None, locs_markersize=25, d_grid=.1, Ngrids=1, plo
             for i in range(DS1.ch1.pos.shape[0]):
                 ax.arrow(DS1.ch20linked.pos[i,1],DS1.ch20linked.pos[i,0], DS1.ch2.pos[i,1]-DS1.ch20linked.pos[i,1],
                           DS1.ch2.pos[i,0]-DS1.ch20linked.pos[i,0], width=.2, 
-                          length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
+                          length_includes_head=False, facecolor='red', edgecolor='red', head_width=1)
                 
         (nn, i,j)=(Hx1_grid.shape[0],0,0)
         while i<HGrid.shape[0]:
@@ -283,10 +283,10 @@ def plt_grid(DS1, fig=None,ax=None, locs_markersize=25, d_grid=.1, Ngrids=1, plo
     ax2.set_ylim([temp.x2_min*temp.gridsize, temp.x2_max*temp.gridsize-temp.pix_size])
     
     ## shift arrows 
-    ax2.arrow(temp.x1_max*temp.gridsize-500-temp.ShiftModel.trainable_variables[0][1], temp.x2_max*temp.gridsize-500, temp.ShiftModel.trainable_variables[0][1], 0,
-              width=5, length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
-    ax2.arrow(temp.x2_max*temp.gridsize-500, temp.x2_max*temp.gridsize-500-temp.ShiftModel.trainable_variables[0][0], 0, temp.ShiftModel.trainable_variables[0][0],
-              width=5, length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
+    ax2.arrow(-600,-3500, temp.ShiftModel.trainable_variables[0][1], 0,
+              width=5, length_includes_head=True, facecolor='red', edgecolor='red', head_width=20)
+    ax2.arrow(-600,-3500, 0, temp.ShiftModel.trainable_variables[0][0],
+              width=5, length_includes_head=True, facecolor='red', edgecolor='red', head_width=20)
     
     if annotate is not None: annotate_image(ax1, annotate, displacement=[-4000,0])
     plt.tight_layout()
@@ -388,5 +388,5 @@ def ErrorDistribution_xy(DS1, nbins=30, xlim=31, error=None, mu=None, fit_data=T
 ErrorDistribution_xy(DS2, nbins=nbins, xlim=pair_filter[2], error=DS2.coloc_error, annotate='E')
 
 ##fig1h
-fig,axFOV=DS2.ErrorFOV(None, figsize=(12,9))
+fig,axFOV=DS2.ErrorFOV(None, figsize=(9,12), placement='bottom')
 annotate_image(axFOV[0], 'F', displacement=[-10,2])

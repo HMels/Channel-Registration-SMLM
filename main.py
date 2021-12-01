@@ -32,7 +32,7 @@ if False: #% Load Beads
     gridsize=500
 
 
-if True: #% Load FRET clusters
+if False: #% Load FRET clusters
     maxDistance=800
     DS1 = dataset(['C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5', 
                    'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5'],
@@ -44,13 +44,13 @@ if True: #% Load FRET clusters
     
     ## optimization params
     execute_linked=True
-    learning_rates = [1000, .1, 2e-3]
-    epochs = [100, None, 200]
+    learning_rate = 2e-3
+    epochs = 200
     pair_filter = [250, 250, 250]
     gridsize=100
     
     
-if False: #% Load Excel Niekamp
+if True: #% Load Excel Niekamp
     maxDistance=1000
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
                   pix_size=1, loc_error=1.4, mu=0.3, coloc_error=np.sqrt(2)*1.4,
@@ -67,8 +67,8 @@ if False: #% Load Excel Niekamp
     
     ## optimization params
     execute_linked=True
-    learning_rates = [1e3, .1, 1e-3]
-    epochs = [100, None, 300]
+    learning_rate = 1e-3
+    epochs = 300
     pair_filter = [250, 30, 30]
     gridsize=6500
 
@@ -124,7 +124,7 @@ if False: #% Load Excel Niekamp test clusters
     
     
 #%% running the model
-DS1.TrainRegistration(execute_linked=execute_linked, learning_rates=learning_rates, 
+DS1.TrainRegistration(execute_linked=execute_linked, learning_rate=learning_rate, 
                       epochs=epochs, pair_filter=pair_filter, gridsize=gridsize)
 
 if DS2 is not None:

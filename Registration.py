@@ -34,6 +34,31 @@ class Registration(Plot):
         Plot.__init__(self)
         
         
+    def AffineLLS(self):
+    # linear least squares for affine 
+        def LLS(X, Y):
+            return Y@(tf.transpose(X))@tf.linalg.inv(X@tf.transpose(X))
+        
+        Y1=self.ch1.pos[:,0][None]
+        Y2=self.ch1.pos[:,1][None]
+        X=tf.concat([tf.transpose(self.ch2.pos), tf.ones((1,self.ch2.pos.shape[0]),dtype=tf.float32)], axis=0)
+        print(X.shape)
+        print(Y1.shape)
+        M1=LLS(X, Y1)
+        M2=LLS(X, Y2)
+        self.AffineMat=tf.concat([M1,M2], axis=0)
+        self.ch2.pos.assign(tf.transpose(self.AffineMat@X))
+        
+        
+    def Apply_Affine(self, AffineMat=None):
+        if AffineMat is None: AffineMat=self.AffineMat
+        if AffineMat is None: raise Exception("AffineLLS has not been trained yet")
+        else:
+            X=tf.concat([tf.transpose(self.ch2.pos), tf.ones((1,self.ch2.pos.shape[0]),dtype=tf.float32)], axis=0)
+            self.ch2.pos.assign(tf.transpose(AffineMat@X))
+            
+        
+        
     #%% Optimization functions
     def Train_Model(self, model, lr=1, epochs=100, opt_fn=tf.optimizers.Adagrad, ch1=None, ch2=None, opt=None):
         if epochs!=0 and epochs is not None:
@@ -108,9 +133,9 @@ class Registration(Plot):
         return loss
         
             
-    def Transform_Model(self, model, ch2=None):
-        print('Transforming '+model.name+' Mapping...')
-        if model is None: print('Model not trained yet, will pass without transforming.')
+    def Apply_Model(self, model, ch2=None):
+        print('Applying '+model.name+' Mapping...')
+        if model is None: print('Model not trained yet, will pass without Applying.')
         else: 
             if ch2 is None:
                 ch2_mapped=model(self.ch2.pos)
@@ -129,6 +154,26 @@ class Registration(Plot):
              
         
     #%% CatmullRom Splines
+    def Train_Splines(self, learning_rate, epochs, gridsize=3000, edge_grids=1):            
+            # initializing and training the model
+            ch1_input,ch2_input=self.InitializeSplines(gridsize=gridsize, edge_grids=edge_grids)
+            self.SplinesModel=CatmullRomSpline2D(self.ControlPoints)
+            self.Train_Model(self.SplinesModel, lr=learning_rate, epochs=epochs, opt_fn=tf.optimizers.SGD, 
+                             ch1=ch1_input, ch2=ch2_input)  
+            self.ControlPoints = self.SplinesModel.ControlPoints
+            
+                     
+    def Apply_Splines(self):
+        self.ControlPoints = self.SplinesModel.ControlPoints
+        self.ch2.pos.assign(self.InputSplines(
+            self.Apply_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2.pos)),
+            inverse=True))
+        if self.Neighbours:
+            self.ch2NN.pos.assign(self.InputSplines(
+                self.Apply_Model(self.SplinesModel, ch2=self.InputSplines(self.ch2NN.pos)),
+                inverse=True))
+
+    
     def InitializeSplines(self, gridsize=3000, edge_grids=1):
         self.ControlPoints=self.generate_CPgrid(gridsize, edge_grids)
         self.edge_grids = edge_grids
