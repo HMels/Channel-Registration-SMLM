@@ -20,11 +20,7 @@ from dataset import dataset
 from dataset_simulation import dataset_simulation, dataset_copy, Deform, Affine_Deform
 from Channel import Channel
 
-from Align_Modules.Affine import AffineModel
-from Align_Modules.Polynomial3 import Polynomial3Model
-from Align_Modules.RigidBody import RigidBodyModel
-from Align_Modules.Splines import CatmullRomSpline2D
-from Align_Modules.Shift import ShiftModel
+from CatmullRomSpline2D import CatmullRomSpline2D
 plt.rc('font', size=25)
 
 def annotate_image(ax, text):
@@ -239,8 +235,8 @@ def plt_filter(DS1, annotate=None, figsize=(12,6), shift=None):
 def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plotmap=False, annotate=None, figsize=(12,6)):
     print('Plotting...')
     gen_channel(DS1,precision=DS1.pix_size)
-    channel20=np.flipud(DS1.channel20)
-    channel2=np.flipud(DS1.channel2)
+    #channel20=np.flipud(DS1.channel20)
+    #channel2=np.flipud(DS1.channel2)
     #label=['x2', 'x1']
     
     
@@ -267,7 +263,8 @@ def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plot
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
-    ax1.imshow(channel20, extent = DS1.axis)
+    #ax1.imshow(channel20, extent = DS1.axis)
+    ax1.plot(DS1.ch20.pos.numpy()[:,0],DS1.ch20.pos.numpy()[:,1],'.')
     gridmapping(ax1, DS1, HGrid, VGrid, Hx1_grid, Vx2_grid, Ngrids, plotarrows=False)
     #ax1.set_xlabel(label[0])
     #ax1.set_ylabel(label[1])
@@ -282,7 +279,8 @@ def plt_grid(DS1, locs_markersize=25, d_grid=.1, Ngrids=1, plotarrows=True, plot
     HGrid = DS1.InputSplines(DS1.SplinesModel( DS1.InputSplines(HGrid) ), inverse=True)
     VGrid = DS1.InputSplines(DS1.SplinesModel( DS1.InputSplines(VGrid) ), inverse=True)
     
-    ax2.imshow(channel2, extent = DS1.axis)
+    #ax2.imshow(channel2, extent = DS1.axis)
+    ax2.plot(DS1.ch2.pos.numpy()[:,0],DS1.ch2.pos.numpy()[:,1],'.')
     gridmapping(ax2, DS1, HGrid, VGrid, Hx1_grid, Vx2_grid, Ngrids, plotarrows=True)
     #ax2.set_xlabel(label[0])
     #ax2.set_ylabel(label[1])
@@ -302,8 +300,8 @@ def gridmapping(ax, DS1, HGrid, VGrid, Hx1_grid, Vx2_grid, Ngrids, plotarrows=Tr
     # plotting the localizations
     if plotarrows:
         for i in range(DS1.ch1.pos.shape[0]):
-            ax.arrow(DS1.ch20linked.pos[i,1],DS1.ch20linked.pos[i,0], DS1.ch2.pos[i,1]-DS1.ch20linked.pos[i,1],
-                      DS1.ch2.pos[i,0]-DS1.ch20linked.pos[i,0], width=.2, 
+            ax.arrow(DS1.ch20linked.pos[i,0],DS1.ch20linked.pos[i,1], DS1.ch2.pos[i,0]-DS1.ch20linked.pos[i,0],
+                      DS1.ch2.pos[i,1]-DS1.ch20linked.pos[i,1], width=.2, 
                       length_includes_head=True, facecolor='red', edgecolor='red', head_width=100)
     
     # plotting the ControlPoints
@@ -382,46 +380,41 @@ DS1.ch2.pos.assign(deform.deform(DS1.ch2.pos))
 
 #%%
 # original
-plt_channel(DS1, annotate='A')
+#plt_channel(DS1, annotate='A')
 DS1=copy_image(DS1)
 
 # linking
 DS1.link_dataset(maxDistance=2000)
-plt_linking(DS1, annotate='B')
+#plt_linking(DS1, annotate='B')
 DS1=copy_image(DS1)
 
 # shift
-DS1.ShiftModel=ShiftModel()
-DS1.Train_Model(DS1.ShiftModel, lr=100, epochs=100, opt_fn=tf.optimizers.Adagrad)
-DS1.Transform_Model(DS1.ShiftModel)
+DS1.AffineLLS()
 #plt_shift(DS1, annotate='C', figsize=(4.8,4.8))
 DS1=copy_image(DS1)
 
 # filter
 DS1.Filter(1500) 
-plt_filter(DS1, annotate='D', shift=DS1.ShiftModel.d.numpy())
+#plt_filter(DS1, annotate='D', shift=DS1.ShiftModel.d.numpy())
 DS1=copy_image(DS1)
     
 # splines
-ch1_input,ch2_input=DS1.InitializeSplines(gridsize=1500, edge_grids=1)
-DS1.SplinesModel=CatmullRomSpline2D(DS1.ControlPoints)
-DS1.Train_Model(DS1.SplinesModel, lr=1e-2, epochs=300, opt_fn=tf.optimizers.SGD, 
-                 ch1=ch1_input, ch2=ch2_input)  
-# applying the model
-DS1.ControlPoints = DS1.SplinesModel.ControlPoints
-DS1.ch2.pos.assign(DS1.InputSplines(
-    DS1.Transform_Model(DS1.SplinesModel, ch2=DS1.InputSplines(DS1.ch2.pos)),
-    inverse=True))
+
+#% CatmullRomSplines
+DS1.execute_linked=True #%% Splines can only be optimized by pair-optimization
+DS1.Train_Splines(1e-2, 300, 1500, edge_grids=1)
+DS1.Apply_Splines()
 plt_grid(DS1, annotate='E')
+DS1.PlotSplineGrid(Ngrids=1)
 DS1=copy_image(DS1)
 
 
 # filter
 DS1.Filter(200) 
-plt_filter(DS1, annotate='F',figsize=(12,6))
+#plt_filter(DS1, annotate='F',figsize=(12,6))
 
 #%% last image
-plt_channel(DS1, annotate='G',figsize=(12,6))
+#plt_channel(DS1, annotate='G',figsize=(12,6))
 '''
 # reload points
 np.random.seed(1)

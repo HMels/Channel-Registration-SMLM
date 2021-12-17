@@ -21,43 +21,25 @@ if False: #% Load Beads
     maxDistance=None
     DS1 = dataset(['C:/Users/Mels/Documents/example_MEP/mol115_combined_clusters.hdf5'],
                   pix_size=159, loc_error=1.4, mu=0,
-                  linked=True, FrameLinking=False, BatchOptimization=False)
+                  linked=True, FrameLinking=False, BatchOptimization=False, execute_linked=True)
     DS1.load_dataset_hdf5(align_rcc=False)
     
     ## optimization params
-    execute_linked=True
-    learning_rates = [1000, 1, 1e-2]
-    epochs = [100, None, 300]
+    learning_rate = 1e-2
+    epochs = 300
     pair_filter = [None, 30, 30]
-    gridsize=500
-
-
-if False: #% Load FRET clusters
-    maxDistance=800
-    DS1 = dataset(['C:/Users/Mels/Documents/example_MEP/ch0_locs.hdf5', 
-                   'C:/Users/Mels/Documents/example_MEP/ch1_locs.hdf5'],
-                  pix_size=159, loc_error=10, mu=0, coloc_error=np.sqrt(2)*10,
-                  imgshape=[256,512], linked=False, FrameLinking=True, BatchOptimization=False)
-    DS1.load_dataset_hdf5(align_rcc=False)
-    DS1, DS2=DS1.SplitDataset()   
-    DS1.link_dataset(maxDistance=maxDistance)
-    
-    ## optimization params
-    execute_linked=True
-    learning_rate = 2e-3
-    epochs = 200
-    pair_filter = [250, 250, 250]
-    gridsize=100
+    gridsize=4000
     
     
-if True: #% Load Excel Niekamp
+if False: #% Load Excel Niekamp
     maxDistance=1000
+    k=1
     DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3, coloc_error=np.sqrt(2)*1.4,
-                  linked=False, FrameLinking=True, BatchOptimization=False)
+                  pix_size=1, loc_error=1.4, mu=0.3, linked=False,
+                  FrameLinking=True, BatchOptimization=False, execute_linked=True)
     DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3, coloc_error=np.sqrt(2)*1.4,
-                  linked=False, FrameLinking=True)
+                  pix_size=1, loc_error=1.4, mu=0.3, linked=False, 
+                  FrameLinking=True, execute_linked=True)
     DS1.load_dataset_excel()
     DS2.load_dataset_excel()
     DS1.pix_size=159
@@ -66,71 +48,75 @@ if True: #% Load Excel Niekamp
     DS2.link_dataset(maxDistance=maxDistance)
     
     ## optimization params
-    execute_linked=True
     learning_rate = 1e-3
     epochs = 300
-    pair_filter = [250, 30, 30]
+    pair_filter = [250, 30, 15]
     gridsize=6500
 
 
-if False: #% DNA-PAINT
-    maxDistance=4000
-    DS1 = dataset(['C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan1.hdf5', 
-                   'C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan2.hdf5'],
-                  pix_size=159, loc_error=None, mu=0,
-                  linked=False, FrameLinking=True, BatchOptimization=False)
-    DS1.load_dataset_hdf5(align_rcc=True)
-    #DS1=DS1.SubsetRandom(subset=0.1)
-    #DS1=DS1.SubsetWindow(subset=0.5)
-    DS1, DS2=DS1.SplitDataset()
-    #DS1.link_dataset(maxDistance=maxDistance)
-    DS1.SplitBatches(10, FrameLinking=True)
-    #DS2=DS1.SimpleShift(DS2, maxDistance=800)
-    DS1.find_neighbours(maxDistance=maxDistance, FrameLinking=True)
-    #DS1.SubsetAddFrames(50, 1)
+if True: #% Load FRET clusters
+    maxDistance=300
+    k=1
+    DS1locs = dataset(['C:/Users/Mels/Documents/example_MEP/ch0_locs_picked_clusters.hdf5', 
+                   'C:/Users/Mels/Documents/example_MEP/ch1_locs_picked_clusters.hdf5'],
+                  pix_size=159, loc_error=10, mu=0, imgshape=[512,256], 
+                  linked=False, FrameLinking=False, BatchOptimization=False, execute_linked=True)
+    DS1locs.load_dataset_hdf5(align_rcc=True, transpose=True)
+    #DS1locs, DS2locs=DS1locs.SplitDatasetClusters()
+    DS1=DS1locs.ClusterDataset(loc_error=None)
+    #DS2=DS2locs.ClusterDataset()
+    DS1.link_dataset(maxDistance=maxDistance)
+    DS1,DS2=DS1.SplitDataset()
     
     ## optimization params
-    execute_linked=False
-    learning_rates = [1e2, 1e-2, 1e-3]
-    epochs = [None, 100, None]
-    pair_filter = [None, None, maxDistance]
+    learning_rate=1e-3
+    epochs=None
+    pair_filter=[None, None, maxDistance]
+    gridsize=5000
+    
+    
+if False: #% Load DNA-paint
+    maxDistance=300
+    k=1
+    DS1locs = dataset(['C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan1_picked.hdf5',
+                       'C:/Users/Mels/Documents/DNA_PAINT/DNA_PAINT-chan2_picked.hdf5'],
+                  pix_size=159, loc_error=10, mu=0, imgshape=[512,256], 
+                  linked=False, FrameLinking=False, BatchOptimization=False, execute_linked=True)
+    DS1locs.load_dataset_hdf5(align_rcc=True, transpose=False)
+    #DS1locs, DS2locs=DS1locs.SplitDatasetClusters()
+    DS1=DS1locs.ClusterDataset(loc_error=None)
+    #DS2=DS2locs.ClusterDataset()
+    DS1.link_dataset(maxDistance=maxDistance)
+    DS1,DS2=DS1.SplitDataset()
+    
+    ## optimization params
+    learning_rate=5e-5
+    epochs=None
+    pair_filter=[None, None, maxDistance]
     gridsize=1000
     
- 
-if False: #% Load Excel Niekamp test clusters
-    maxDistance=1000
-    DS1 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set1/set1_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3,
-                  linked=False, FrameLinking=True, BatchOptimization=False)
-    DS2 = dataset('C:/Users/Mels/Documents/Supplementary-data/data/Registration/Set2/set2_beads_locs.csv',
-                  pix_size=1, loc_error=1.4, mu=0.3,
-                  linked=False, FrameLinking=True)
-    DS1.load_dataset_excel()
-    DS2.load_dataset_excel()
-    DS1.pix_size=159
-    DS2.pix_size=DS1.pix_size
-    DS1.link_dataset(maxDistance=maxDistance)
-    DS2.link_dataset(maxDistance=maxDistance)
-    DS2=DS1.SimpleShift(DS2, maxDistance=maxDistance)
-    DS1.find_neighbours(FrameLinking=False,maxDistance=maxDistance)
-    #DS1.SubsetAddFrames(5, 1)
-    
-    ## optimization params
-    execute_linked=False
-    learning_rates = [1e2, 1e-3, 1e-3]
-    epochs = [None, 10, 300]
-    pair_filter = [None, 100, 100]
-    gridsize=6500
-    
-    
+fig,ax=DS1.show_channel(DS1.ch1.pos, ps=7)
+DS1.show_channel(DS1.ch2.pos, ps=7, color='blue',fig=fig, ax=ax)
 #%% running the model
-DS1.TrainRegistration(execute_linked=execute_linked, learning_rate=learning_rate, 
-                      epochs=epochs, pair_filter=pair_filter, gridsize=gridsize)
+start=time.time()
+#DS1.AffineLLS(maxDistance, k)
+DS1.Filter(pair_filter[0]) 
+
+#% CatmullRomSplines
+if epochs is not None:
+    DS1.Train_Splines(learning_rate, epochs, gridsize, edge_grids=1, opt_fn=tf.optimizers.SGD, 
+                      maxDistance=maxDistance, k=k)
+    DS1.Apply_Splines()
+    
+DS1.Filter(pair_filter[1])
+print('Optimized in',round((time.time()-start)/60,1),'minutes!')
+
 
 if DS2 is not None:
     DS2.copy_models(DS1) ## Copy all mapping parameters
-    DS2.ApplyRegistration()
-    
+    #DS2.Apply_Affine(DS1.AffineMat)
+    if DS2.SplinesModel is not None: DS2.Apply_Splines()
+   
 
 #%% output
 nbins=100
@@ -140,9 +126,10 @@ if not DS1.linked:
     DS1.link_dataset(maxDistance=maxDistance, FrameLinking=True)
 
 ## DS1
-DS1.ErrorPlot(nbins=nbins)
+#DS1.ErrorPlot(nbins=nbins)
 DS1.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS1.coloc_error, fit_data=True)
-DS1.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS1.coloc_error, mu=DS1.mu, fit_data=True)
+#DS1.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS1.coloc_error, mu=DS1.mu, fit_data=True)
+#DS1.ErrorFOV()
 
 
 #%% DS2 output
@@ -151,27 +138,23 @@ if DS2 is not None:
         DS2.link_dataset(maxDistance=maxDistance,FrameLinking=True)
             
     DS2.Filter(pair_filter[1])
-    DS2.ErrorPlot(nbins=nbins)
+    #DS2.ErrorPlot(nbins=nbins)
     DS2.ErrorDistribution_xy(nbins=nbins, xlim=xlim, error=DS2.coloc_error)
-    DS2.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS2.coloc_error, mu=DS2.mu)
-
-
-#%% DS1 vs DS2
-DS1.ErrorFOV(DS2)
+    #DS2.ErrorDistribution_r(nbins=nbins, xlim=xlim, error=DS2.coloc_error, mu=DS2.mu)
+    #DS2.ErrorFOV()
 
 
 #%% Image overview
+fig,ax=DS1.show_channel(DS1.ch1.pos, ps=7)
+DS1.show_channel(DS1.ch2.pos, ps=7, color='blue', fig=fig, ax=ax)
 if False:
-    DS0=copy.deepcopy(DS1)
-    if DS2 is not None:
-        DS0.AppendDataset(DS2)
-    DS0.reload_dataset()
-    DS0.ApplyRegistration()
-    #DS0.SubsetWindow(subset=0.2)
-    #DS0.Filter(pair_filter[1])
-    DS0.generate_channel(precision=DS0.pix_size*DS0.subset)
-    DS0.plot_channel()
-    #DS0.plot_1channel()
+    DS1.generate_channel(precision=DS1.pix_size)
+    DS1.plot_1channel()
+    
+if False and DS2 is not None:
+    DS2.generate_channel(precision=DS2.pix_size)
+    DS2.plot_1channel()
+    
     
 #%% model summary
 DS1.model_summary()

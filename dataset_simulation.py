@@ -130,21 +130,6 @@ class dataset_simulation(dataset):
         
 
     def gauss_2d(self, mu, sigma, N):
-        '''
-        Generates a 2D gaussian cluster
-        Parameters
-        ----------
-        mu : 2 float array
-            The mean location of the cluster.
-        sigma : 2 float array
-            The standard deviation of the cluster.
-        N : int
-            The number of localizations.
-        Returns
-        -------
-        Nx2 float Array
-            The [x1,x2] localizations .
-        '''
         x1 = np.float32( rnd.normal(mu[0], sigma[0], N) )
         x2 = np.float32( rnd.normal(mu[1], sigma[1], N) )
         return np.array([x1, x2]).transpose()
@@ -206,21 +191,6 @@ class dataset_copy(dataset):
         
 
     def gauss_2d(self, mu, sigma, N):
-        '''
-        Generates a 2D gaussian cluster
-        Parameters
-        ----------
-        mu : 2 float array
-            The mean location of the cluster.
-        sigma : 2 float array
-            The standard deviation of the cluster.
-        N : int
-            The number of localizations.
-        Returns
-        -------
-        Nx2 float Array
-            The [x1,x2] localizations .
-        '''
         x1 = np.float32( rnd.normal(mu[0], sigma[0], N) )
         x2 = np.float32( rnd.normal(mu[1], sigma[1], N) )
         return np.array([x1, x2]).transpose()
@@ -234,24 +204,6 @@ class dataset_copy(dataset):
 class Deform():
     '''
     This class contains all functions and variables used to give the image a deformation
-    
-    The variables are:
-        - shift
-        - rotation
-        - shear
-        - scaling
-    
-    The functions are:
-        - deformation()
-        - ideformation()
-        - shift_def()
-        - shift_idef()
-        - rotation_def()
-        - rotation_idef()
-        - shear_def()
-        - shear_idef()
-        - scaling_def()
-        - scaling_idef()
     '''
     
     def __init__(self, shift=np.array([ 500  , 650 ]), rotation=0.2, 

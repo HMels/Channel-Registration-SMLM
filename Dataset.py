@@ -10,29 +10,28 @@ import tensorflow as tf
 import numpy as np
 from photonpy import PostProcessMethods, Context, Dataset
 
-from Channel import Channel
-from Model import Model     
+from Registration import Registration
+from Channel import Channel 
 
 
 #%% Dataset
-class dataset(Model):
-    def __init__(self, path, pix_size=1, loc_error=10, mu=0, coloc_error=None,
-                 linked=False, imgshape=[512, 512], 
-                 FrameLinking=True, BatchOptimization=False):
+class dataset(Registration):
+    def __init__(self, path, pix_size=1, loc_error=10, mu=0, coloc_error=None, imgshape=[512, 512],
+                 linked=False, FrameLinking=True, BatchOptimization=False, execute_linked=True):
         self.path=path            # the string or list containing the strings of the file location of the dataset
         self.pix_size=pix_size    # the multiplicationfactor to change the dataset into units of nm
         self.loc_error=loc_error  # localization error
-        self.coloc_error=coloc_error if coloc_error is not None else np.sqrt(2)*loc_error
+        self.coloc_error=coloc_error if coloc_error is not None else np.sqrt(2)*loc_error if loc_error is not None else None
         self.mu=mu
         self.imgshape=imgshape    # number of pixels of the dataset
         self.linked=linked        # is the data linked/paired?
         self.linked_original=linked
         self.FrameLinking=FrameLinking              # will the dataset be linked or NN per frame?
         self.BatchOptimization=BatchOptimization    # will the dataset be optimized per frame
-        self.subset=1      
+        self.execute_linked=execute_linked          # false if optimization via NN
         self.counts_linked=None
         self.counts_Neighbours=None
-        Model.__init__(self)        
+        Registration.__init__(self)
         
         
     def reload_dataset(self):
@@ -48,8 +47,24 @@ class dataset(Model):
         self.Neighbours=False
         
         
+    def ClusterDataset(self, loc_error=None):
+        # outputs a dataset of cluster center of masses
+        other=copy.deepcopy(self)
+        pos1=self.ch1.ClusterCOM()[0]
+        pos2=self.ch2.ClusterCOM()[0]
+        del other.ch1, other.ch2, other.ch20linked, other.ch10, other.ch20
+        other.ch1=Channel(pos1, np.ones(pos1.shape[0]))
+        other.ch2=Channel(pos2, np.ones(pos2.shape[0]))
+        other.ch10=Channel(pos1, np.ones(pos1.shape[0]))
+        other.ch20=Channel(pos2, np.ones(pos2.shape[0]))
+        other.ch20linked=Channel(pos2, np.ones(pos2.shape[0]))
+        other.loc_error=loc_error if loc_error is not None else None
+        other.coloc_error=np.sqrt(2)*loc_error if loc_error is not None else None
+        return other
+        
+        
     #%% load_dataset
-    def load_dataset_excel(self):
+    def load_dataset_excel(self, transpose=False):
         data = pd.read_csv(self.path)
         grouped = data.groupby(data.Channel)
         ch1 = grouped.get_group(1)
@@ -65,12 +80,18 @@ class dataset(Model):
         self.ch10=copy.deepcopy(self.ch1)
         self.ch20=copy.deepcopy(self.ch2)
         self.ch20linked=copy.deepcopy(self.ch2)
+        if transpose:
+            self.ch1.transpose_axis()
+            self.ch2.transpose_axis()
+            self.ch10.transpose_axis()
+            self.ch20.transpose_axis()
+            self.ch20linked.transpose_axis()
         
         self.img, self.imgsize, self.mid = self.imgparams()      # loading the image parameters
         self.center_image()
     
     
-    def load_dataset_hdf5(self, align_rcc=True):
+    def load_dataset_hdf5(self, align_rcc=True, transpose=False):
         ## Loading dataset
         if len(self.path)==1 or isinstance(self.path,str):
             # Dataset is grouped, meaning it has to be split manually
@@ -90,6 +111,10 @@ class dataset(Model):
         else:
             raise TypeError('Path invalid')
             
+        if transpose:
+            ch1.pos=ch1.pos[:,[1,0]]
+            ch2.pos=ch2.pos[:,[1,0]]
+        
         if align_rcc:
             print('Alignning both datasets')
             shift = Dataset.align(ch1, ch2)
@@ -99,8 +124,8 @@ class dataset(Model):
             else: 
                 print('Warning: Shift contains infinities')
         
-        self.ch1 = Channel(pos = ch1.pos* self.pix_size, frame = ch1.frame)
-        self.ch2 = Channel(pos = ch2.pos* self.pix_size, frame = ch2.frame)
+        self.ch1 = Channel(pos = ch1.pos* self.pix_size, frame = ch1.frame, group=ch1.group)
+        self.ch2 = Channel(pos = ch2.pos* self.pix_size, frame = ch2.frame, group=ch2.group)
         self.ch10=copy.deepcopy(self.ch1)
         self.ch20=copy.deepcopy(self.ch2)
         self.ch20linked=copy.deepcopy(self.ch2)
@@ -152,51 +177,34 @@ class dataset(Model):
         if self.ch20linked is not None and other.ch20linked is not None:
             self.ch20linked.AppendChannel(other.ch20linked)
         
-        
-    def Subset(self, subset_boundaries, linked=None):
+    
+    def SubsetWindow(self, window=None, subset=None, linked=None):
     # loading subset of dataset by creating a window of size subset 
-        if linked is None: linked=self.linked
-        print('Taking a subset of size of points within',subset_boundaries,'...')
-        
+        if linked is None: linked=self.linked        
         self.img, self.imgsize, self.mid = self.imgparams()
-        if subset_boundaries[0,0]>=subset_boundaries[1,0] or subset_boundaries[0,1]>=subset_boundaries[1,1]:
-            raise ValueError('Invalid input. Look at the subset boundaries')
-        if (subset_boundaries[0,0]<=self.img[0,0] or subset_boundaries[0,0]>=self.img[1,0] or 
-            subset_boundaries[0,1]<=self.img[0,1] or subset_boundaries[0,1]>=self.img[1,1] or
-            subset_boundaries[1,0]<=self.img[0,0] or subset_boundaries[1,0]>=self.img[1,0] or
-            subset_boundaries[1,1]<=self.img[0,1] or subset_boundaries[1,1]>=self.img[1,1]):
-            raise ValueError('Subset Boundaries out of bounds')
+        if subset is not None:
+            window = np.array([self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2,
+                        self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2       
+                               ])
+        elif window is None:
+            raise Exception('No window or subset selected')
             
-        idx1 = (np.where(self.ch1.pos.numpy()[:,0] >= subset_boundaries[0,0],True,False) * np.where(self.ch1.pos.numpy()[:,1] >= subset_boundaries[0,1],True,False)
-                            * np.where(self.ch1.pos.numpy()[:,0] <= subset_boundaries[1,0],True,False) * np.where(self.ch1.pos.numpy()[:,1] <= subset_boundaries[1,1],True,False) )
-        idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= subset_boundaries[0,0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= subset_boundaries[0,1],True,False)
-                            * np.where(self.ch2.pos.numpy()[:,0] <= subset_boundaries[1,0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= subset_boundaries[1,1],True,False) )
+        idx1=(np.where(self.ch1.pos.numpy()[:,0]>window[0,0],True,False)
+             *np.where(self.ch1.pos.numpy()[:,0]<window[0,1],True,False)
+             *np.where(self.ch1.pos.numpy()[:,1]>window[1,0],True,False)
+             *np.where(self.ch1.pos.numpy()[:,1]<window[1,1],True,False))
+        idx2=(np.where(self.ch2.pos.numpy()[:,0]>window[0,0],True,False)
+             *np.where(self.ch2.pos.numpy()[:,0]<window[0,1],True,False)
+             *np.where(self.ch2.pos.numpy()[:,1]>window[1,0],True,False)
+             *np.where(self.ch2.pos.numpy()[:,1]<window[1,1],True,False))
         
+        if self.gridsize is not None:
+            self.x1_min=window[0,0]/self.gridsize
+            self.x1_max=window[0,1]/self.gridsize
+            self.x2_min=window[1,0]/self.gridsize
+            self.x2_max=window[1,1]/self.gridsize
+            
         if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
-        self.subset*=idx1.shape[0]/self.ch1.pos.shape[0]
-        if linked:
-            idx=idx1*idx2
-            return self.gather(np.argwhere(idx), np.argwhere(idx))
-        else:
-            return self.gather(np.argwhere(idx1), np.argwhere(idx2))
-        
-        
-    def SubsetWindow(self, subset, linked=None):
-    # loading subset of dataset by creating a window of size subset 
-        if linked is None: linked=self.linked
-        print('Taking a subset of size',subset,'...')
-        
-        self.img, self.imgsize, self.mid = self.imgparams()
-        l_grid = self.mid - np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-        r_grid = self.mid + np.array([ subset*self.imgsize[0], subset*self.imgsize[1] ])/2
-
-        idx1 = (np.where(self.ch1.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch1.pos.numpy()[:,1] >= l_grid[1],True,False)
-                            * np.where(self.ch1.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch1.pos.numpy()[:,1] <= r_grid[1],True,False) )
-        idx2 = (np.where(self.ch2.pos.numpy()[:,0] >= l_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] >= l_grid[1],True,False)
-                            * np.where(self.ch2.pos.numpy()[:,0] <= r_grid[0],True,False) * np.where(self.ch2.pos.numpy()[:,1] <= r_grid[1],True,False) )
-        
-        if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
-        self.subset*=subset
         if linked:
             idx=idx1*idx2
             return self.gather(np.argwhere(idx), np.argwhere(idx))
@@ -212,7 +220,6 @@ class dataset(Model):
         else:
             mask1=self.random_choice(self.ch1.pos.shape[0], int(self.ch1.pos.shape[0]*subset))
             mask2=self.random_choice(self.ch2.pos.shape[0], int(self.ch2.pos.shape[0]*subset))
-        self.subset*=subset
             
         if len(mask1)==0 or len(mask2)==0: raise  ValueError('No values returned after subset')
         return self.gather(np.argwhere(mask1), np.argwhere(mask2))
@@ -229,7 +236,6 @@ class dataset(Model):
                          np.where(self.ch2.frame>=begin_frames,True,False))
         
         if len(idx1)==0 or len(idx2)==0: raise  ValueError('No values returned after subset')
-        self.subset*=(end_frames-begin_frames)/np.max(tf.unique(self.ch1.frame)[0])
         if self.linked:
             idx=idx1*idx2
             return self.gather(np.argwhere(idx), np.argwhere(idx))
@@ -284,11 +290,10 @@ class dataset(Model):
     def SplitDataset(self, linked=None):
     # Splits dataset into 2 halves for cross validation)
         if linked is None: linked=self.linked
-        if self.Neighbours: print('WARNING: splitting datasets means the neighbours need to be reloaded!')
         
         N1=self.ch1.pos.shape[0]
         N2=self.ch2.pos.shape[0]
-        if linked or self.Neighbours:
+        if linked:
             if N1!=N2: raise Exception('Datasets are linked but not equal in size')
             mask1=np.ones(N1, dtype=bool)
             mask1[int(N1/2):]=False
@@ -311,6 +316,32 @@ class dataset(Model):
             other2=self.gather(np.argwhere((mask1-1).astype('bool')), np.argwhere((mask2-1).astype('bool')))
         
         return other1, other2
+    
+    
+    def SplitDatasetClusters(self, linked=None):
+    # Splits dataset into 2 halves for cross validation)
+        if linked is None: linked=self.linked
+        
+        N1=self.ch1.pos.shape[0]
+        N2=self.ch2.pos.shape[0]
+        if linked: raise Exception('Splitting clusters does not work when data is linked')
+        clust1=self.ch1.ClusterCOM()
+        clust2=self.ch2.ClusterCOM()
+        idx1,idx2=self.link_clusters(clust1[0], clust1[1], clust2[0], clust2[1], maxDistance=5000)
+        
+        mask1=np.zeros(N1, dtype=bool)
+        mask2=np.zeros(N2, dtype=bool)
+        for i in range(len(idx1)):
+            g=bool(np.random.randint(0,2))
+            mask1[np.argwhere(self.ch1.group==idx1[i])]=g
+            mask2[np.argwhere(self.ch2.group==idx2[i])]=g
+        
+        self.idx1=mask1
+        self.idx2=mask2
+        other1=self.gather(np.argwhere(mask1), np.argwhere(mask2) )
+        other2=self.gather(np.argwhere((mask1-1).astype('bool')), np.argwhere((mask2-1).astype('bool')))
+            
+        return other1, other2
         
     
     def gather(self, idx1, idx2):
@@ -318,118 +349,17 @@ class dataset(Model):
         if len(idx1)==0 or len(idx2)==0: raise ValueError('Cannot gather a zeros sized array')
         other = copy.deepcopy(self)
         del other.ch1, other.ch2, other.ch20linked
-        other.ch1 = Channel(pos=tf.gather_nd(self.ch1.pos,idx1), frame=tf.gather_nd(self.ch1.frame,idx1))
-        other.ch2 = Channel(pos=tf.gather_nd(self.ch2.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2))
-        other.ch10 = Channel(pos=tf.gather_nd(self.ch10.pos,idx1), frame=tf.gather_nd(self.ch10.frame,idx1))
-        other.ch20 = Channel(pos=tf.gather_nd(self.ch20.pos,idx2), frame=tf.gather_nd(self.ch20.frame,idx2))
-        other.ch20linked = Channel(pos=tf.gather_nd(self.ch20linked.pos,idx2), frame=tf.gather_nd(self.ch20linked.frame,idx2))
+        other.ch1 = Channel(pos=tf.gather_nd(self.ch1.pos,idx1), frame=tf.gather_nd(self.ch1.frame,idx1), 
+                            group=tf.gather_nd(self.ch1.group,idx1))
+        other.ch2 = Channel(pos=tf.gather_nd(self.ch2.pos,idx2), frame=tf.gather_nd(self.ch2.frame,idx2), 
+                            group=tf.gather_nd(self.ch2.group,idx2))
+        other.ch10 = Channel(pos=tf.gather_nd(self.ch10.pos,idx1), frame=tf.gather_nd(self.ch10.frame,idx1), 
+                            group=tf.gather_nd(self.ch10.group,idx1))
+        other.ch20 = Channel(pos=tf.gather_nd(self.ch20.pos,idx2), frame=tf.gather_nd(self.ch20.frame,idx2), 
+                            group=tf.gather_nd(self.ch20.group,idx2))
+        other.ch20linked = Channel(pos=tf.gather_nd(self.ch20linked.pos,idx2), frame=tf.gather_nd(self.ch20linked.frame,idx2), 
+                            group=tf.gather_nd(self.ch20linked.group,idx2))
         return other
-    
-    
-    #%% AddFrames
-    def SubsetAddFrames(self, Nbatches, subset=1):
-    # will take a subset of frames and add them together 
-        idx1=tf.argsort(self.ch1.frame)
-        if not self.linked: idx2=tf.argsort(self.ch2.frame)
-        else: idx2=idx1
-        self.ch1.frame.assign(tf.gather(self.ch1.frame, idx1))
-        self.ch1.pos.assign(tf.gather(self.ch1.pos, idx1))
-        self.ch2.frame.assign(tf.gather(self.ch2.frame, idx2))
-        self.ch2.pos.assign(tf.gather(self.ch2.pos, idx2))
-        self.ch20linked.frame.assign(tf.gather(self.ch20linked.frame, idx2))
-        self.ch20linked.pos.assign(tf.gather(self.ch20linked.pos, idx2))
-        
-        # the indices of the frames we choose and the batches we place them in are generated
-        if subset==1: subset_frames=np.arange(1,tf.unique(self.ch1.frame)[0].shape[0]+1)
-        else: subset_frames=np.array(self.random_choice(tf.unique(self.ch1.frame)[0].shape[0], 
-                                                        int(tf.unique(self.ch1.frame)[0].shape[0]*subset)))+1
-        subset_batches=tf.sort(tf.range(0, subset_frames.shape[0], dtype=tf.float32)%Nbatches)
-        self.subset*=subset
-        
-        # first fill in the new positions
-        ch1_frame, ch2_frame, ch20linked_frame = ([],[],[])
-        ch1_pos, ch2_pos, ch20linked_pos = ([],[],[])
-        for fr in range(subset_frames.shape[0]):
-            idx1=np.sort(np.argwhere(self.ch1.frame==subset_frames[fr]))[:,0]
-            if not self.linked: idx2=np.sort(np.argwhere(self.ch2.frame==subset_frames[fr]))[:,0]
-            else: idx2=idx1
-            ch1_pos.append(tf.gather(self.ch1.pos,idx1))
-            ch2_pos.append(tf.gather(self.ch2.pos,idx2))
-            ch20linked_pos.append(tf.gather(self.ch20linked.pos,idx2))
-            ch1_frame.append(
-                subset_batches[fr]*
-                np.ones(idx1.shape[0],dtype=np.float32))
-            ch2_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
-            ch20linked_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
-            
-        del self.ch1, self.ch2, self.ch20linked
-        self.ch1 = Channel(tf.concat(ch1_pos,axis=0), tf.concat(ch1_frame,axis=0))
-        self.ch2 = Channel(tf.concat(ch2_pos,axis=0), tf.concat(ch2_frame,axis=0))
-        self.ch20linked = Channel(tf.concat(ch20linked_pos,axis=0), tf.concat(ch20linked_frame,axis=0))
-        self.subset*=subset
-        
-        # then we focus on the Neighbours
-        if self.Neighbours:
-            ch1NN_frame, ch2NN_frame = ([],[])
-            ch1NN_pos, ch2NN_pos = ([],[])
-            for fr in range(subset_frames.shape[0]):
-                idx1=np.sort(np.argwhere(self.ch1NN.frame==subset_frames[fr]))[:,0]
-                idx2=idx1#np.sort(np.argwhere(self.ch2NN.frame==subset_frames[fr]))[:,0]
-                '''
-                try:
-                    if idx1.shape[0]!=self.Neighbours_mat[fr].shape[1]: print(idx1.shape, self.Neighbours_mat[fr].shape)
-                except:
-                    print(idx1.shape, self.Neighbours_mat[fr].shape)
-                 '''   
-                #if idx1.shape[0]!=0:
-                ch1NN_pos.append(tf.gather(self.ch1NN.pos,idx1))
-                ch2NN_pos.append(tf.gather(self.ch2NN.pos,idx2))
-                ch1NN_frame.append(subset_batches[fr]*np.ones(idx1.shape[0],dtype=np.float32))
-                ch2NN_frame.append(subset_batches[fr]*np.ones(idx2.shape[0],dtype=np.float32))
-                
-            del self.ch1NN, self.ch2NN
-            self.ch1NN = Channel(tf.concat(ch1NN_pos,axis=0), tf.concat(ch1NN_frame,axis=0))
-            self.ch2NN = Channel(tf.concat(ch2NN_pos,axis=0), tf.concat(ch2NN_frame,axis=0))
-            '''
-            Neighbours_mat=[]
-            if not isinstance(self.Neighbours_mat, list): 
-                raise Exception('Subset Add Frames not implemented as non framelinking neighbours yet')
-            for batch in tf.unique(subset_batches)[0]:
-                frames=np.concatenate(subset_frames[np.argwhere(subset_batches==batch)])-1
-                Neighbours_mat.append(self.AppendMat( np.array(self.Neighbours_mat)[frames]))
-            self.Neighbours_mat=Neighbours_mat
-            '''
-        if self.linked: self.counts_linked=[]
-        if self.Neighbours: self.counts_Neighbours=[]
-        for batch in tf.unique(subset_batches)[0]:
-            if self.linked: self.counts_linked.append(
-                    np.argwhere(self.ch1.frame==batch).shape[0]
-                    )
-            if self.Neighbours: self.counts_Neighbours.append(
-                    np.argwhere(self.ch1NN.frame==batch).shape[0]
-                    )
-        '''
-        for i in range(len(self.counts_Neighbours)):
-            if self.counts_Neighbours[i]!=self.Neighbours_mat[i].shape[1]:
-                print(self.counts_Neighbours[i],self.Neighbours_mat[i].shape[1])
-        '''
-    
-    def AppendMat(self, mat):
-    # creates a new matrix of all the submatrices added together vertically
-        len1, len2 = (0,0)
-        for m in mat: # calculate lenght of new matrix
-            #if m.shape[1]!=0:
-            len1+=m.shape[0]
-            len2+=m.shape[1]
-        Mat=np.zeros((len1,len2), dtype=np.float32)
-        
-        len1, len2 = (0,0)
-        for m in mat: # fill in that matrix
-            #if m.shape[1]!=0:
-            Mat[len1:(len1+m.shape[0]),len2:(len2+m.shape[1])]=m.numpy()
-            len1+=m.shape[0]
-            len2+=m.shape[1]
-        return tf.Variable(Mat, dtype=tf.float32, trainable=False)
     
     
     #%% pair_functions
@@ -448,8 +378,11 @@ class dataset(Model):
             ch1_pos=self.ch1.pos.numpy()
             ch2_pos=self.ch2.pos.numpy()
             ch20_pos=self.ch20linked.pos.numpy()
+            ch1_group=self.ch1.group.numpy()
+            ch2_group=self.ch2.group.numpy()
+            ch20_group=self.ch20linked.group.numpy()
             
-            (pos1, frame1, pos2, frame2, pos20, frame20) = ([],[],[],[],[],[])
+            (pos1, frame1, pos2, frame2, pos20, frame20, group1, group2, group20) = ([],[],[],[],[],[],[],[],[])
             if FrameLinking: ## Linking per frame
                 frame,_=tf.unique(self.ch1.frame)
                 self.counts_linked=[]
@@ -458,6 +391,9 @@ class dataset(Model):
                     framepos1=ch1_pos[ch1_frame==fr,:]
                     framepos2=ch2_pos[ch2_frame==fr,:]
                     framepos20=ch20_pos[ch20_frame==fr,:]
+                    framegroup1=ch1_group[ch1_frame==fr]
+                    framegroup2=ch2_group[ch2_frame==fr]
+                    framegroup20=ch20_group[ch20_frame==fr]
                     
                     with Context() as ctx: # loading all NN
                         counts,indices = PostProcessMethods(ctx).FindNeighbors(framepos1, framepos2, maxDistance)
@@ -477,12 +413,17 @@ class dataset(Model):
                             posA=framepos1[idx[0][0],:]
                             posB=framepos2[idx[1],:]
                             posB0=framepos20[idx[1],:]
+                            ii=np.argmin( np.sum((posA-posB)**2) )
+                            
                             frame1.append(fr)
                             frame2.append(fr)
                             frame20.append(fr)
                             pos1.append(posA)
-                            pos2.append(posB[ np.argmin( np.sum((posA-posB)**2) ) ,:])
-                            pos20.append(posB0[ np.argmin( np.sum((posA-posB)**2) ) ,:])
+                            pos2.append(posB[ ii ,:])
+                            pos20.append(posB0[ ii ,:])
+                            group1.append(framegroup1[idx[0][0]])
+                            group2.append(framegroup2[idx[1]][ii])
+                            group20.append(framegroup20[idx[1]][ii])
                             
                 self.counts_linked.append(tf.reduce_sum(counts))
                 
@@ -513,17 +454,67 @@ class dataset(Model):
                         pos1.append(ch1_pos[i,:])
                         pos2.append(posB[j,:])
                         pos20.append(posB0[j,:])
+                        group1.append(ch1_group[i])
+                        group2.append(ch2_group[idx[1][j]])
+                        group20.append(ch20_group[idx[1][j]])
             
             if len(pos1)==0 or len(pos2)==0: raise ValueError('When Coupling Datasets, one or both of the Channels returns empty')
             
             del self.ch1, self.ch2, self.ch20linked
-            self.ch1 = Channel( np.array(pos1) , np.array(frame1) )
-            self.ch2 = Channel( np.array(pos2) , np.array(frame2) )
-            self.ch20linked = Channel( np.array(pos20) , np.array(frame20) )
+            self.ch1 = Channel( np.array(pos1) , np.array(frame1), np.array(group1) )
+            self.ch2 = Channel( np.array(pos2) , np.array(frame2), np.array(group2) )
+            self.ch20linked = Channel( np.array(pos20) , np.array(frame20), np.array(group20) )
             self.linked = True       
         
         
-    #%% Generate Neighbours
+    def link_clusters(self, clusterpos1, clusterlist1, clusterpos2, clusterlist2, maxDistance=5000):
+        with Context() as ctx: # loading all NN
+            counts,indices = PostProcessMethods(ctx).FindNeighbors(clusterpos1, clusterpos2, maxDistance)
+            
+        pos,i=(0,0)
+        clust1,clust2=([],[])
+        for count in counts:
+            if count!=0:
+                pos1=tf.gather(clusterpos1, i * np.ones([count], dtype=int))
+                pos2=tf.gather(clusterpos2, indices[pos:pos+count])
+                lst1=tf.gather(clusterlist1, i * np.ones([count], dtype=int))
+                lst2=tf.gather(clusterlist2, indices[pos:pos+count])
+                indx=np.argmin( tf.reduce_sum(tf.pow(pos1-pos2,2), axis=1) )
+                clust1.append(tf.gather(lst1,indx))
+                clust2.append(tf.gather(lst2,indx))
+            pos+=count
+            i+=1
+        return tf.stack(clust1), tf.stack(clust2)
+        
+        
+    #%% Generate 
+    def load_kNN(self, k, maxDistance=2000):
+        self.ch1NN, self.ch2NN = self.kNearestNeighbour(self.ch1.pos.numpy(), self.ch2.pos.numpy(), 
+                                                        k=k, maxDistance=maxDistance)
+    
+    
+    def kNearestNeighbour(self, pos1=None, pos2=None, k=8, maxDistance=2000):
+        if pos1 is None: pos1=self.ch1.pos.numpy()
+        if pos2 is None: pos2=self.ch2.pos.numpy()
+        with Context() as ctx: # loading all NN
+            counts,indices = PostProcessMethods(ctx).FindNeighbors(pos1, pos2, maxDistance)
+    
+        pos,i=(0,0)
+        pos1NN,pos2NN=([],[])
+        for count in counts:
+            if count!=0:
+                pos1sbs=tf.gather(pos1, i * np.ones([count], dtype=int))
+                pos2sbs=tf.gather(pos2, indices[pos:pos+count])
+                indx=np.argsort( tf.reduce_sum(tf.pow(pos1sbs-pos2sbs,2), axis=1) )[:k]
+                pos1NN.append(tf.gather(pos1sbs,indx))
+                pos2NN.append(tf.gather(pos2sbs,indx))
+            pos+=count
+            i+=1
+        self.ch1NN=tf.reshape(tf.concat(pos1NN,axis=0), [-1,2])
+        self.ch2NN=tf.reshape(tf.concat(pos2NN,axis=0), [-1,2])
+        return self.ch1NN, self.ch2NN
+    
+    
     def find_neighbours(self, maxDistance=50, FrameLinking=None):
     # Tries to generate neighbours according to all spots
         print('Finding neighbours within a distance of',maxDistance,'nm.')
@@ -574,24 +565,7 @@ class dataset(Model):
         self.ch1NN = Channel( tf.concat(pos1, axis=0), tf.concat(frame1, axis=0) )
         self.ch2NN = Channel( tf.concat(pos2, axis=0), tf.concat(frame1, axis=0) )
         self.Neighbours=True
-                
-    '''
-    def GenerateNeighboursMat(self, pos1=None, counts=None):
-        if counts is None:
-            with Context() as ctx: # loading all NN
-                counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
-                                                                       self.ch2.pos.numpy(), self.NN_maxDistance)
-        if pos1 is None:    
-            pos1=self.ch1.pos.numpy()
-            
-        Neighbours_mat=np.zeros([pos1.shape[0],tf.reduce_sum(counts)],dtype=np.float32)
-        pos, i=(0,0)
-        for count in counts:
-            Neighbours_mat[i,pos:pos+count]=1
-            pos+=count
-            i+=1
-        return tf.Variable(Neighbours_mat, trainable=False, dtype=tf.float32)
-    '''
+        
         
     def random_choice(self,original_length, final_length):
         if original_length<final_length: raise ValueError('Invalid Input')
@@ -634,28 +608,5 @@ class dataset(Model):
             N1=self.ch1.pos.shape[0]
             print('Out of the '+str(N0)+' pairs localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
         else:
-            print('WARNING: Filtering is turned off, will pass without filtering.')
+            print('Filtering is turned off, will pass without filtering.')
         
-        '''
-    def Filter_Neighbours(self, maxDistance=150):
-        if maxDistance is not None:
-            print('Filtering localizations that have no Neighbours under',maxDistance,'nm...')
-            if not self.Neighbours: raise Exception('Tried to filter without the Neighbours having been generated')
-            N0=self.ch1NN.pos.shape[0]
-            
-            dists = np.sqrt(np.sum( (self.ch1NN.pos.numpy() - self.ch2NN.pos.numpy())**2 , axis=1))
-            idx = np.argwhere(dists<maxDistance)
-            ch1_pos = self.ch1NN.pos.numpy()[idx[:,0],:]
-            ch2_pos = self.ch2NN.pos.numpy()[idx[:,0],:]
-            ch1_frame = self.ch1NN.frame.numpy()[idx[:,0]]
-            ch2_frame = self.ch2NN.frame.numpy()[idx[:,0]]
-            
-            if ch1_pos.shape[0]==0: raise Exception('All positions will be filtered out in current settings!')
-            del self.ch1NN, self.ch2NN
-            self.ch1NN = Channel(ch1_pos, ch1_frame)
-            self.ch2NN = Channel(ch2_pos, ch2_frame)
-            N1=self.ch1NN.pos.shape[0]
-            print('Out of the '+str(N0)+' Neighbours localizations, '+str(N0-N1)+' have been filtered out ('+str(round((1-(N1/N0))*100,1))+'%)')
-        else:
-            print('WARNING: Filtering is turned off, will pass without filtering.')
-            '''

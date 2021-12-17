@@ -8,9 +8,11 @@ import tensorflow as tf
 
 #%% Channel 
 class Channel:
-    def __init__(self, pos=None, frame=None):
+    def __init__(self, pos=None, frame=None, group=None):
         self.pos = tf.Variable(pos, dtype=tf.float32, trainable=False) if pos is not None else {}
         self.frame = tf.Variable(frame, dtype=tf.float32, trainable=False) if frame is not None else {}
+        self.group = tf.Variable(group, dtype=tf.int32, trainable=False) if group is not None else tf.zeros(self.frame.shape[0], dtype=tf.int32) 
+        
         if self.pos.shape[0]!=self.frame.shape[0]: raise ValueError('Frame and Positions are not equal in size!')
         self.img, self.imgsize, self.mid = self.imgparams()
         
@@ -39,4 +41,19 @@ class Channel:
         del self.pos,self.frame
         self.pos=tf.Variable(tf.concat([pos,other.pos],axis=0), dtype=tf.float32, trainable=False) 
         self.frame=tf.Variable(tf.concat([frame,other.frame],axis=0), dtype=tf.float32, trainable=False) 
+        
+        
+    def ClusterCOM(self):
+        print('Generating the centers of masses for the pre-assigned cluster groups...')
+        clust=[]
+        clustlist=tf.unique(self.group)[0]
+        for i in clustlist:
+            pos=tf.gather_nd(self.pos, tf.where(self.group==i))
+            clust.append(tf.reduce_sum(pos,axis=0)/pos.shape[0])
+        if len(clust)!=len(clustlist): raise Exception('The clusters have not been sorted!')
+        return tf.stack(clust, axis=0), clustlist
+        
+
+    def transpose_axis(self):
+        self.pos.assign(tf.Variable(self.pos.numpy()[:,[1,0]], dtype=tf.float32, trainable=False))
         
