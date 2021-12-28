@@ -242,7 +242,7 @@ class Plot:
             self.ydist_var=np.array([np.round(pcovy[0],2),np.round(pcovy[1],2)])
             if error is not None: self.xydist_opt=np.array([np.round(mu,2),np.round(sgm,2)])
             else: self.xydist_opt=None
-            return poptx, popty
+            return poptx, popty, pcovx, pcovy
         else: return None, None
         
         
@@ -272,20 +272,17 @@ class Plot:
         
         
         if fit_data: ## fit bar plot data using curve_fit
-            def func(r, sigma, mu=mu):
+            def func(r, sigma, mu):
                 # from Churchman et al 2006
                 sigma2=sigma**2
-                if mu==0:
-                    return r/sigma2*np.exp(-r**2/2/sigma2)
-                else:
-                    return (r/sigma2)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
+                return (r/sigma2)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
     
             N = pos1.shape[0] * ( n[1][1]-n[1][0] )
             xn=(n[1][:-1]+n[1][1:])/2 
-            popt, pcov = curve_fit(func, xn, n[0]/N, p0=np.std(xn))
+            popt, pcov = curve_fit(func, xn, n[0]/N, p0=[np.std(xn), np.average(xn)])
             x = np.linspace(0, xlim, 1000)
             y = func(x, *popt)*N
-            if plot_on: plt.plot(x, y, c='g',label=(r'fit: $\mu$='+str(round(mu,2))+', $\sigma$='+str(round(popt[0],2))+'nm'))
+            if plot_on: plt.plot(x, y, c='g',label=(r'fit: $\mu$='+str(round(popt[1],2))+', $\sigma$='+str(round(popt[0],2))+'nm'))
             
             ## plot how function should look like
             if error is not None:
@@ -304,17 +301,43 @@ class Plot:
             
         
         if fit_data:
-            self.rdist_params=np.array([np.round(mu,2),np.round(popt[0],2)])
+            self.rdist_params=np.array([np.round(popt[1],2),np.round(popt[0],2)])
             self.rdist_var=np.round(pcov[0],2)
             if error is not None: self.rdist_opt=np.array([np.round(mu,2),np.round(sgm,2)])
             else: self.rdist_opt=None
-            return popt
+            return popt, pcov
         else: return None
         
 
     #%% plotting the error in a [x1, x2] plot like in the paper        
-    def ErrorFOV(self, other=None, maxDistance=30, ps=1, cmap='seismic', figsize=None, title=None,
-                 placement='right', colorbar=True, center=[3,3], clusters=False, text=True):
+    def ErrorFOV(self, other=None, maxDistance=30, ps=1, cmap='seismic', figsize=None, title=None, precision=750,
+                 placement='right', colorbar=True, center=[3,3], clusters=False, text=True, alpha=.8, norm=1):
+        def prepdata(pos, z, precision=750):
+            min1=np.min(pos[:,0])/1000
+            min2=np.min(pos[:,1])/1000
+            max1=np.max(pos[:,0])/1000
+            max2=np.max(pos[:,1])/1000
+            density=pos.shape[0]/((max1-min1)*(max2-min2))*precision/1000
+            pos[:,0]-=min1
+            pos[:,1]-=min2
+            
+            N1=int(np.max(pos[:,0])/precision)+1
+            N2=int(np.max(pos[:,1])/precision)+1
+            Z=np.zeros([N2,N1], dtype=float)
+            #N=np.zeros([N2,N1], dtype=float)
+            for n in range(z.shape[0]): #calculate average displacement per cell
+                i=np.floor(pos[n,1]/precision).astype('int')
+                j=np.floor(pos[n,0]/precision).astype('int')
+                Z[i,j]+=z[n]/density
+            #    N[i,j]+=1
+            #for i in range(N2):
+            #    for j in range(N1):
+            #        if N[i,j]>1.: Z[i,j]/=N[i,j]
+            
+            X=np.linspace(min1,max1, N1)
+            Y=np.linspace(min2,max2, N2)
+            return X,Y,Z
+        
         if clusters:
             pos1=self.ch1.ClusterCOM()[0]
             pos2=self.ch2.ClusterCOM()[0]
@@ -324,7 +347,7 @@ class Plot:
         else:
             pos1=self.ch1.pos.numpy()
             pos2=self.ch2.pos.numpy()
-        dist = pos1-pos2
+        dist = (pos1-pos2)/norm
             
         if not self.linked and not clusters: raise Exception('Dataset should first be linked before registration errors can be derived!')
         if dist.shape==(0,): raise ValueError('No neighbours found for channel 1')
@@ -334,56 +357,92 @@ class Plot:
         xlim=(tf.reduce_min(pos1[:,0]/1000),tf.reduce_max(pos1[:,0]/1000))
         ylim=(tf.reduce_min(pos1[:,1]/1000),tf.reduce_max(pos1[:,1]/1000))
         
-        vmin=np.min((np.min(dist[:,0]),np.min(dist[:,1])))
-        vmax=np.max((np.max(dist[:,0]),np.max(dist[:,1])))
-        norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-        
-        ax[0].scatter(pos1[:,0]/1000, pos1[:,1]/1000, s=ps, c=dist[:,0],
-                      cmap=cmap, norm=norm, alpha=.8, lw=0)
-        if text:
-            ax[0].text(x=ax[0].get_xlim()[1]-center[0],y=ax[0].get_ylim()[1]-center[1], s='x-error', color='black',ha='right', va='top', bbox=dict(boxstyle="square",
-                                                           ec=(1., 0.5, 0.5),
-                                                           fc=(1., 0.8, 0.8),
-                                                           ))
-        #ax[0].set_xlabel('x-position [\u03bcm]')
-        #ax[0].set_ylabel('y-position [\u03bcm]')
+        X1,Y1,Z1=prepdata(pos1, dist[:,0], precision=precision)
+        X2,Y2,Z2=prepdata(pos1, dist[:,1], precision=precision)
+        vmin=np.min([np.min(Z1),np.min(Z2)])
+        vmax=np.max([np.max(Z1),np.max(Z2)])
+        if vmin<0: 
+            vm=np.max([-vmin, vmax])
+            norm=mpl.colors.Normalize(vmin=-vm, vmax=vm, clip=False)
+        else:
+            norm=mpl.colors.Normalize(vmin=0, vmax=vmax, clip=False)
+            
+        ax[1].contourf(X2,Y2,Z2, norm=norm, cmap=cmap, alpha=.8) 
+        ax[0].contourf(X1,Y1,Z1, norm=norm, cmap=cmap, alpha=.8)
+            
         ax[0].set_xticks([])
         ax[0].set_yticks([])
         ax[0].set_xlim(xlim)
         ax[0].set_ylim(ylim)
-        #ax[0].set_title('x-error')
+        ax[0].set_title('x-error')
         ax[0].set_aspect('equal', 'box')
         
-        ax[1].scatter(pos1[:,0]/1000, pos1[:,1]/1000,  s=ps, c=dist[:,1],
-                      cmap=cmap, norm=norm, alpha=.8, lw=0)
-        if text:
-            ax[1].text(x=ax[1].get_xlim()[1]-center[0],y=ax[1].get_ylim()[1]-center[1], s='y-error', color='black',ha='right', va='top', bbox=dict(boxstyle="square",
-                                                           ec=(1., 0.5, 0.5),
-                                                           fc=(1., 0.8, 0.8),
-                                                           ))
-        #ax[1].set_xlabel('x-position [\u03bcm]')
+        #ax[0].scatter(pos1[:,0]/1000, pos1[:,1]/1000, s=ps, c=dist[:,0],
+        #              cmap=cmap, norm=norm, alpha=.8, lw=0)
+        #ax[1].scatter(pos2[:,0]/1000, pos2[:,1]/1000,  s=ps, c=dist[:,1],
+        #              cmap=cmap, norm=norm, alpha=.8, lw=0)
+        
         ax[1].set_xticks([])
         ax[1].set_yticks([])
         ax[1].set_xlim(xlim)
         ax[1].set_ylim(ylim)
-        #ax[1].set_title('y-error')
+        ax[1].set_title('y-error')
         ax[1].set_aspect('equal', 'box')
         
-        #fig.tight_layout()
         if placement=='bottom': 
             shrink=0.8 
             aspect=20
         else: 
             shrink=.8
             aspect=40
-        cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
-                     ax=ax[1], shrink=shrink, aspect=aspect, location=placement)
-        if not colorbar: 
-            cb.remove() 
-            plt.draw()
-            
+        if colorbar:
+            cb=fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), 
+                                     shrink=shrink, aspect=aspect)#, ticks=[-1000,0,1000])
+            #cb.ax.set_yticklabels(['10', '0', '10'])
         if title is not None: fig.suptitle(title)
         return fig,ax
+    
+    
+    def ErrorFOVr(self, fig, ax1, ax2, ps=7, cmap='seismic', placement='right', colorbar=True, clusters=False):
+        if clusters:
+            pos1=self.ch1.ClusterCOM()[0]
+            pos2=self.ch2.ClusterCOM()[0]
+            pos1, pos2=self.kNearestNeighbour(pos1, pos2, k=-1, maxDistance=5000)
+            pos1=pos1.numpy()
+            pos2=pos2.numpy()
+        else:
+            pos1=self.ch1.pos.numpy()
+            pos2=self.ch2.pos.numpy()
+        dist = tf.sqrt(tf.reduce_sum(tf.square(pos1-pos2),axis=1))
+            
+        if not self.linked and not clusters: raise Exception('Dataset should first be linked before registration errors can be derived!')
+        if dist.shape==(0,): raise ValueError('No neighbours found for channel 1')
+          
+        xlim=(tf.reduce_min(pos1[:,0]/1000),tf.reduce_max(pos1[:,0]/1000))
+        ylim=(tf.reduce_min(pos1[:,1]/1000),tf.reduce_max(pos1[:,1]/1000))
+        
+        vmax=np.max(dist)
+        norm=mpl.colors.Normalize(vmin=0, vmax=vmax, clip=False)
+        
+        ax1.scatter(pos1[:,0]/1000, pos1[:,1]/1000, s=ps,
+                      cmap=cmap, norm=norm, alpha=.8, lw=0)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax1.set_xlim(xlim)
+        ax1.set_ylim(ylim)
+        ax1.set_aspect('equal', 'box')
+        
+        ax2.scatter(pos2[:,0]/1000, pos2[:,1]/1000, s=ps, c=dist,
+                      cmap=cmap, norm=norm, alpha=.8, lw=0)
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+        ax2.set_xlim(xlim)
+        ax2.set_ylim(ylim)
+        ax2.set_aspect('equal', 'box')
+        
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap))
+        #fig.tight_layout()
+        return fig,ax1, ax2
     
         
     #%% Channel to matrix fn
@@ -430,24 +489,26 @@ class Plot:
     
     
     #%% Plotting Channels
-    def show_channel(self, pos, color='red', ps=3, alpha=1, fig=None,  ax=None, figsize=(3,6), addpatch=True):
+    def show_channel(self, pos, color='red', ps=3, alpha=1, fig=None,  ax=None,
+                     figsize=(3,6), addpatch=True, lims=None):
         print('Plotting...')
-        label=['y-position', 'x-position']
         if figsize is None: figsize=(4,int(self.imgshape[0]/self.imgshape[1])*4)
         if fig is None: fig=plt.figure(figsize=figsize)
         if ax is None: ax=fig.add_subplot(111)
         ax.scatter(pos[:,0]/1000,pos[:,1]/1000, color=color, marker='.', s=ps, alpha=alpha, lw=0)
-        #ax.set_xlabel(label[0])
-        #ax.set_ylabel(label[1])
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_xlim(-self.imgshape[0]/2*self.pix_size/1000, self.imgshape[0]/2*self.pix_size/1000)
-        ax.set_ylim(-self.imgshape[1]/2*self.pix_size/1000, self.imgshape[1]/2*self.pix_size/1000)
+        if lims is None:
+            ax.set_xlim([np.min(self.ch1.pos[:,0])/1000,np.max(self.ch1.pos[:,0])/1000])
+            ax.set_ylim([np.min(self.ch1.pos[:,1])/1000,np.max(self.ch1.pos[:,1])/1000])
+        else:
+            ax.set_xlim(lims[0,:]/1000)
+            ax.set_ylim(lims[1,:]/1000)
         fig.tight_layout()
         
         if addpatch:
-            x1=-self.imgshape[0]/2*self.pix_size/1000 +3
-            x2=-self.imgshape[1]/2*self.pix_size/1000 +3
+            x1=np.min(self.ch1.pos[:,0])/1000 +3
+            x2=np.min(self.ch1.pos[:,1])/1000 +3
             ax.add_patch(Rectangle((x1,x2), 10, .5, ec='black', fc='black'))
             ax.text(x1, x2+.5, r'10$\mu$m', ha='left', va='bottom')
         return fig, ax
@@ -501,8 +562,9 @@ class Plot:
     
         
     #%% Plotting the Grid
-    def PlotSplineGrid(self, ch1=None, ch2=None, ch20=None, locs_markersize=25,
-                        CP_markersize=20, d_grid=.1, Ngrids=4, plotarrows=True, plotmap=False): 
+    def PlotSplineGrid(self, ch1=None, ch2=None, ch20=None, fig=None, ax=None, figsize=None,
+                       locs_markersize=25, CP_markersize=20, d_grid=.1, Ngrids=4, lw=1,
+                       plotmap=False, plotpoints=False, plotCP=False): 
         '''
         Plots the grid and the shape of the grid in between the Control Points
     
@@ -543,19 +605,19 @@ class Plot:
         ch20=zero_axis(ch20)
         
         # plotting the localizations
-        plt.figure()
-        plt.scatter(ch20[:,0],ch20[:,1], c='green', marker='.', s=locs_markersize, label='Original')
-        plt.scatter(ch1[:,0],ch1[:,1], c='red', marker='.', s=locs_markersize, label='Target')
-        if plotarrows:
-            for i in range(ch1.shape[0]):
-                plt.arrow(ch20[i,0],ch20[i,1], ch2[i,0]-ch20[i,0], ch2[i,1]-ch20[i,1], width=.02, 
-                          length_includes_head=True, facecolor='red', edgecolor='red')
+        if fig is None:
+            if figsize is None: fig=plt.figure()
+            else:  fig=plt.figure(figsize=figsize)
+        if ax is None: ax=fig.add_subplot(111)
+            
+        if plotpoints:
+            ax.scatter(ch20[:,0],ch20[:,1], c='green', marker='.', s=locs_markersize, label='Original')
+            ax.scatter(ch1[:,0],ch1[:,1], c='red', marker='.', s=locs_markersize, label='Target')
         if plotmap: 
-            plt.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
-        
-        # plotting the ControlPoints
-        plt.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
-                    c='b', marker='d', s=CP_markersize, label='ControlPoints')
+            ax.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
+        if plotCP:
+            ax.scatter(self.ControlPoints[:,:,0]*self.gridsize, self.ControlPoints[:,:,1]*self.gridsize,
+                        c='b', marker='d', s=CP_markersize, label='ControlPoints')
         
         ## Horizontal Grid
         x1_grid = tf.range(0, tf.reduce_max(self.ControlPoints[:,:,0])+d_grid, delta=d_grid, dtype=tf.float32)
@@ -566,9 +628,9 @@ class Plot:
         (nn, i,j)=(x1_grid.shape[0],0,0)
         while i<Grid.shape[0]:
             if j%Ngrids==0:
-                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+                ax.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b', lw=lw)
             else:
-                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+                ax.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c', lw=lw)
             i+=nn
             j+=1
 
@@ -581,107 +643,12 @@ class Plot:
         (nn, i,j)=(x2_grid.shape[0],0,0)
         while i<Grid.shape[0]:
             if j%Ngrids==0:
-                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
+                ax.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b', lw=lw)
             else:
-                plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
+                ax.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c', lw=lw)
             i+=nn
             j+=1
         
-        plt.legend(loc='upper right')
-        plt.tight_layout()
-            
-
-    def PlotGridMapping(self, model, gridsize, edge_grids=None, ch1=None, ch2=None, ch20=None, 
-                            locs_markersize=25, CP_markersize=25, d_grid=.1, Ngrids=4, plotarrows=True, plotmap=False): 
-            '''
-            Plots the grid and the shape of the grid in between the Control Points
-        
-            Parameters
-            ----------
-            ch1 , ch2 , ch20 : Nx2 tf.float32 tensor
-                The tensor containing the localizations.
-            d_grid : float, optional
-                The precission of the grid we want to plot in between the
-                ControlPoints. The default is .1.
-            lines_per_CP : int, optional
-                The number of lines we want to plot in between the grids. 
-                Works best if even. The default is 1.
-            locs_markersize : float, optional
-                The size of the markers of the localizations. The default is 10.
-            CP_markersize : float, optional
-                The size of the markers of the Controlpoints. The default is 8.
-                
-            Returns
-            -------
-            None.
-        
-            '''
-            print('Plotting the Mapping Grid...')
-            if ch1 is None:
-                self.center_image()
-                ch1=self.ch1.pos
-                ch2=self.ch2.pos
-                ch20=self.ch20.pos
-            if edge_grids is None: edge_grids=self.edge_grid
-            
-            x1_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,0]))),
-                                  np.min(tf.reduce_min(tf.floor(ch2[:,0])))])/gridsize
-            x2_min = np.min([np.min(tf.reduce_min(tf.floor(ch1[:,1]))),
-                                  np.min(tf.reduce_min(tf.floor(ch2[:,1])))])/gridsize
-            x1_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,0]))),
-                                  np.max(tf.reduce_max(tf.floor(ch2[:,0])))])/gridsize
-            x2_max = np.max([np.max(tf.reduce_max(tf.floor(ch1[:,1]))),
-                                  np.max(tf.reduce_max(tf.floor(ch2[:,1])))])/gridsize
-        
-            x1_grid = tf.range(x1_min-edge_grids, x1_max+edge_grids+1, dtype=tf.float32)
-            x2_grid = tf.range(x2_min-edge_grids, x2_max+edge_grids+1, dtype=tf.float32)
-            if model is not None: ControlPoints = model(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1))
-            else: ControlPoints = tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1)
-            
-            # plotting the localizations
-            plt.figure()
-            plt.scatter(ch20[:,0],ch20[:,1], c='green', marker='.', s=locs_markersize, label='Original')
-            plt.scatter(ch1[:,0],ch1[:,1], c='red', marker='.', s=locs_markersize, label='Target')
-            if plotarrows:
-                for i in range(ch1.shape[0]):
-                    plt.arrow(ch20[i,0],ch20[i,1], ch2[i,0]-ch20[i,0], ch2[i,1]-ch20[i,1], width=.02, 
-                              length_includes_head=True, facecolor='red', edgecolor='red')
-            if plotmap: 
-                plt.scatter(ch2[:,0],ch2[:,1], c='blue', marker='.', s=locs_markersize, label='Mapped')
-            
-            # plotting the ControlPoints
-            plt.scatter(ControlPoints[:,:,0]*gridsize, ControlPoints[:,:,1]*gridsize,
-                        c='b', marker='d', s=CP_markersize)
-            
-            ## Horizontal Grid
-            x1_grid = tf.range(x1_min-edge_grids, tf.math.ceil(x1_max)+edge_grids+d_grid, delta=d_grid, dtype=tf.float32)
-            x2_grid = tf.range(x2_min-edge_grids, tf.math.ceil(x2_max)+edge_grids+d_grid, delta=1/Ngrids, dtype=tf.float32)
-            Grid = tf.reshape(tf.stack(tf.meshgrid(x1_grid, x2_grid), axis=-1) , (-1,2)) 
-            if model is not None: Grid = model( Grid ) * gridsize
-            else: Grid = Grid*gridsize
-            (nn, i,j)=(x1_grid.shape[0],0,0)
-            while i<Grid.shape[0]:
-                if j%Ngrids==0:
-                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
-                else:
-                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
-                i+=nn
-                j+=1
-
-            ## Vertical Grid
-            x1_grid = tf.range(x1_min-edge_grids, tf.math.ceil(x1_max)+edge_grids+d_grid, delta=1/Ngrids, dtype=tf.float32)
-            x2_grid = tf.range(x2_min-edge_grids, tf.math.ceil(x2_max)+edge_grids+d_grid, delta=d_grid, dtype=tf.float32)
-            Grid = tf.gather(tf.reshape(tf.stack(tf.meshgrid(x2_grid, x1_grid), axis=-1) , (-1,2)), [1,0], axis=1)
-            if model is not None: Grid = model( Grid ) * gridsize
-            else: Grid = Grid*gridsize
-            (nn, i,j)=(x2_grid.shape[0],0,0)
-            while i<Grid.shape[0]:
-                if j%Ngrids==0:
-                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='b')
-                else:
-                    plt.plot(Grid[i:i+nn,0], Grid[i:i+nn,1], c='c')
-                i+=nn
-                j+=1
-            
-            plt.legend(loc='upper right')
-            plt.tight_layout()
+        ax.legend(loc='upper right')
+        fig.tight_layout()
+        return fig, ax

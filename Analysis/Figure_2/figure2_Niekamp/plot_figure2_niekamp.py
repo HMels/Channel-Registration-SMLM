@@ -27,7 +27,6 @@ from Channel import Channel
 from CatmullRomSpline2D import CatmullRomSpline2D
 plt.rc('font', size=10)
 dpi=800
-ylim=[3,6]
 
 plt.close('all')
 #%% loading the dataset
@@ -55,15 +54,10 @@ if True: ## Niekamp
     
     
 #%%
-figsize1=(3.08,1.65)
-fig1,ax1=DS01.ErrorFOV(figsize=figsize1, ps=3, colorbar=False)
-ax1[0].add_patch(Rectangle((-37, -37), 10, 1, ec='black', fc='black'))
-ax1[0].text(-37, -36, r'10$\mu$m', ha='left', va='bottom')
-#ax1[1].text(x=np.min(DS01.ch2.pos[:,0])/1000+2, y=np.max(DS01.ch2.pos[:,1])/1000-2, 
-#           s='N='+str(Num), ha='left', va='top', bbox=dict(boxstyle="square",
-#                                                           ec=(1., 0.5, 0.5),
-#                                                           fc=(1., 0.8, 0.8),
-#                                                           ))
+figsize1=(4.15,2.25)
+fig1,ax1=DS01.ErrorFOV(figsize=figsize1, ps=1, colorbar=True, center=[6,6], clusters=False, alpha=0)
+ax1[0].add_patch(Rectangle((-35, -35), 10, 1, ec='black', fc='black'))
+ax1[0].text(-34, -35, r'10$\mu$m', ha='left', va='bottom')
 fig1.savefig(output_path0+'Figures/fig1', transparent=True, dpi=dpi)
 
 
@@ -81,51 +75,70 @@ opts=[ tf.optimizers.Adam, tf.optimizers.Adagrad, tf.optimizers.Adadelta, tf.opt
 opts_name=[ 'Adam', 'Adagrad', 'Adadelta', 'Adamax', 'Ftrl', 'Nadam', 'RMSprop', 'SGD']
 svfig=['Figure_2a','Figure_2b','Figure_2c','Figure_2d','Figure_2e','Figure_2f','Figure_2g','Figure_2h']
 
-fig2=plt.figure(figsize=(4.15,3.5))
+fig2=plt.figure(figsize=(3.9,2.25))
 ax2=fig2.add_subplot(111)
 
 for i in range(len(opts_name)):
-   #plt.errorbar(epochs_fig2, mu2_fig2[i,:], yerr=sigma2_fig2[i,:], label=opts_name[i],
-   #            xerr=None, ls=':', fmt='', capsize=10,) 
    plt.errorbar(epochs_fig2, mu2_fig2[i,:], label=opts_name[i], ls=':') 
 
 ax2.set_xscale('log')
-#ax.set_yscale('log')
 ax2.set_xlabel('iterations')
-#ax2.set_ylabel(r'$\sigma$ [nm]')
-ax2.set_ylim(ylim)
-ax2.set_yticks([])
+ax2.set_ylim([4,10])
+ax2.set_yticks([4,6,8, 10])
 ax2.set_xlim([epochs_fig2[0],epochs_fig2[-1]])
-#ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
 ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
-ax2.legend(ncol=2, frameon=False)
+ax2.legend(ncol=2, frameon=False, loc='upper right')
 fig2.tight_layout()
 fig2.savefig(output_path0+'Figures/fig2', transparent=True, dpi=dpi)
 
 
 #%% fig3
+ylim=[3,5.5]
 sigma1_fig3=np.loadtxt(output_path0+'DataOutput/sigma1_fig3.txt')
 sigma2_fig3=np.loadtxt(output_path0+'DataOutput/sigma2_fig3.txt')
-std1_fig3=np.loadtxt(output_path0+'DataOutput/std1_fig3.txt')
-std2_fig3=np.loadtxt(output_path0+'DataOutput/std2_fig3.txt')
 learning_rates=np.loadtxt(output_path0+'DataOutput/learning_rates.txt')
 
 
-fig3, ax3 = plt.subplots(figsize=(4.25,2.25))
-p1=ax3.errorbar(learning_rates, sigma1_fig3, yerr=std1_fig3,
-               xerr=None, ls=':', fmt='', ecolor='blue', capsize=2, label='Training')
-p3=ax3.errorbar(learning_rates, sigma2_fig3, yerr=std2_fig3,
-               xerr=None, ls=':', fmt='', ecolor='green', capsize=2, label='Cross-Validation')
+fig3=plt.figure(figsize=(4.4,2.1))
+ax3 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+ax4 = plt.subplot2grid((3, 1), (2, 0), rowspan=1)
+p1=ax3.errorbar(learning_rates, sigma1_fig3, yerr=None,
+               xerr=None, ms=5, ls=':', fmt='', color='blue', label='estimation')
+p3=ax3.errorbar(learning_rates, sigma2_fig3, yerr=None,
+               xerr=None, ms=5, ls=':', fmt='', color='red', label='testing')
 
 ax3.set_xscale('log')
-ax3.set_xlabel('learning-rate')
-#ax3.set_ylabel(r'$\sigma$ [nm]')
+ax3.set_ylabel(r'precision [nm]')
 ax3.set_ylim([ylim[0],ylim[1]])
+ax3.set_xlim([learning_rates[0],learning_rates[np.argwhere(sigma2_fig3==100)[0]]])
 ax3.yaxis.set_major_locator(MaxNLocator(integer=True))
-ax3.legend(handles=[p1, p3], loc='upper right', frameon=False)
 ax3.spines['top'].set_visible(False)
 ax3.spines['right'].set_visible(False)
+ax3.spines['bottom'].set_visible(False)
+ax3.legend(handles=[p1], loc='lower right', ncol=1,frameon=False)
+ax3.get_xaxis().set_visible(False)
+ax3.set_xticks([])
+
+ylim1=[0,1]
+mu1_fig3=np.loadtxt(output_path0+'DataOutput/mu1_fig3.txt')
+mu2_fig3=np.loadtxt(output_path0+'DataOutput/mu2_fig3.txt')
+learning_rates=np.loadtxt(output_path0+'DataOutput/learning_rates.txt')
+
+
+p1=ax4.errorbar(learning_rates, np.abs(mu1_fig3), yerr=None,
+               xerr=None, ms=5, ls=':', fmt='', color='blue', label='estimation')
+p3=ax4.errorbar(learning_rates, np.abs(mu2_fig3), yerr=None,
+               xerr=None, ms=5, ls=':', fmt='', color='red', label='testing')
+
+ax4.set_xscale('log')
+ax4.set_xlabel('learning-rate')
+ax4.set_ylabel(r'bias')
+ax4.set_ylim(ylim1)
+ax4.set_xlim([learning_rates[0],learning_rates[np.argwhere(sigma2_fig3==100)[0]]])
+ax4.yaxis.set_major_locator(MaxNLocator(integer=True))
+ax4.spines['top'].set_visible(False)
+ax4.spines['right'].set_visible(False)
 fig3.tight_layout()
 fig3.savefig(output_path0+'Figures/fig3', transparent=True, dpi=dpi)
 
@@ -133,31 +146,52 @@ fig3.savefig(output_path0+'Figures/fig3', transparent=True, dpi=dpi)
 #%% fig4
 sigma1_fig4=np.loadtxt(output_path0+'DataOutput/sigma1_fig4.txt')
 sigma2_fig4=np.loadtxt(output_path0+'DataOutput/sigma2_fig4.txt')
-std1_fig4=np.loadtxt(output_path0+'DataOutput/std1_fig4.txt')
-std2_fig4=np.loadtxt(output_path0+'DataOutput/std2_fig4.txt')
 gridsizes=np.loadtxt(output_path0+'DataOutput/gridsizes.txt')
 
     
-fig4, ax4 = plt.subplots(figsize=(3.90, 3.5))
-lns1=ax4.errorbar(gridsizes, sigma1_fig4, yerr=std1_fig4, 
-                  xerr=None, fmt='',ms=5, color='blue', linestyle=':', label='Training')
-lns2=ax4.errorbar(gridsizes*1.02, sigma2_fig4, yerr=std1_fig4,
-                  xerr=None, fmt='',ms=5, color='red', linestyle=':', label='Cross-Validation')
-#lns3=ax1.hlines(DS01.coloc_error, gridsizes[0],gridsizes[-1],linestyle='-.', color='black',label='CRLB')
 
-opt_weight=np.min(sigma2_fig4)
-opt_weight_idx=np.argmin(sigma2_fig4)
-ax4.vlines(gridsizes[opt_weight_idx], ylim[0]/2, opt_weight, color='green', linestyle='--', alpha=0.5)
-ax4.hlines(opt_weight,gridsizes[0],gridsizes[opt_weight_idx], linestyle='--', alpha=0.5, color='green')
-ax4.legend(loc='upper right', frameon=False, ncol=2)
+fig4=plt.figure(figsize=(4.03,2.1))
+ax5 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+ax6 = plt.subplot2grid((3, 1), (2, 0), rowspan=1)
+lns1=ax5.errorbar(gridsizes, sigma1_fig4, yerr=None, 
+                  xerr=None, fmt='',ms=5, color='blue', linestyle=':', label='estimation')
+lns2=ax5.errorbar(gridsizes*1.02, sigma2_fig4, yerr=None, 
+                  xerr=None, fmt='',ms=5, color='red', linestyle=':', label='testing')
 
-ax4.set_xlabel('gridsize [nm]')
-ax4.set_ylabel(r'$\sigma$ [nm]')
-ax4.set_xscale('log')
-ax4.set_ylim([ylim[0], ylim[1]])
-ax4.yaxis.set_major_locator(MaxNLocator(integer=True))
-ax4.set_xlim(gridsizes[0],gridsizes[-1])
-ax4.spines['top'].set_visible(False)
-ax4.spines['right'].set_visible(False)
+ax5.set_yticks([])
+ax5.set_xscale('log')
+ax5.set_ylim([ylim[0], ylim[1]])
+ax5.yaxis.set_major_locator(MaxNLocator(integer=True))
+ax5.set_xlim(gridsizes[0],gridsizes[np.argwhere(np.isnan(sigma2_fig4))[0][0]])
+ax5.spines['top'].set_visible(False)
+ax5.spines['right'].set_visible(False)
+ax5.spines['left'].set_visible(False)
+ax5.spines['bottom'].set_visible(False)
+ax5.get_xaxis().set_visible(False)
+ax5.set_yticks([])
+ax5.set_xticks([])
+ax5.legend(handles=[p3], loc='lower right', ncol=1,frameon=False)
+
+
+mu1_fig4=np.loadtxt(output_path0+'DataOutput/mu1_fig4.txt')
+mu2_fig4=np.loadtxt(output_path0+'DataOutput/mu2_fig4.txt')
+gridsizes=np.loadtxt(output_path0+'DataOutput/gridsizes.txt')
+
+    
+lns1=ax6.errorbar(gridsizes, np.abs(mu1_fig4), yerr=None, 
+                  xerr=None, fmt='',ms=5, color='blue', linestyle=':', label='estimation')
+lns2=ax6.errorbar(gridsizes*1.02, np.abs(mu2_fig4), yerr=None, 
+                  xerr=None, fmt='',ms=5, color='red', linestyle=':', label='testing')
+
+ax6.set_xlabel('gridsize [nm]')
+ax6.set_yticks([])
+ax6.set_xscale('log')
+ax6.set_ylim(ylim1)
+ax6.yaxis.set_major_locator(MaxNLocator(integer=True))
+ax6.set_xlim(gridsizes[0],gridsizes[np.argwhere(np.isnan(sigma2_fig4))[0][0]])
+ax6.spines['top'].set_visible(False)
+ax6.spines['right'].set_visible(False)
+ax6.spines['left'].set_visible(False)
+ax6.set_yticks([])
 plt.tight_layout()
 fig4.savefig(output_path0+'Figures/fig4', transparent=True, dpi=dpi)

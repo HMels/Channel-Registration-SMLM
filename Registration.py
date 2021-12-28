@@ -4,6 +4,7 @@ The align class
 """
 import numpy as np
 import tensorflow as tf
+tf.get_logger().setLevel('ERROR')
 import copy
 from photonpy import PostProcessMethods, Context, Dataset
 
@@ -39,6 +40,7 @@ class Registration(Plot):
         self.NN_maxDistance=None
         self.NN_threshold=None
         self.Neighbours=False        
+        self.loss=[]
         Plot.__init__(self)
         
         
@@ -73,10 +75,10 @@ class Registration(Plot):
             self.ch2.pos.assign(tf.transpose(self.AffineMat@X))
         else:
             if maxDistance is None: raise ValueError("No maxdistance selected yet")
-            pos1NN,pos2NN=self.kNearestNeighbour(self.ch1.pos.numpy(), self.ch2.pos.numpy(), 
-                                                 k=k, maxDistance=maxDistance)
-            XNN=tf.concat([tf.transpose(pos2NN), tf.ones((1,pos2NN.shape[0]),dtype=tf.float32)], axis=0)
-            self.AffineMat=LLS(XNN,pos1NN)
+            if not self.Neighbours: self.kNearestNeighbour(self.ch1.pos.numpy(), self.ch2.pos.numpy(), 
+                                                                        k=k, maxDistance=maxDistance)
+            XNN=tf.concat([tf.transpose(self.ch2NN.pos), tf.ones((1,self.ch2NN.pos.shape[0]),dtype=tf.float32)], axis=0)
+            self.AffineMat=LLS(XNN,self.ch1NN.pos)
             self.ch2.pos.assign(tf.transpose(self.AffineMat@X))
         
         
@@ -116,7 +118,7 @@ class Registration(Plot):
             ## The training loop
             if opt is None: opt=opt_fn(lr)
             for i in range(epochs):
-                loss=self.train_step(model, epochs, opt, ch1, ch2, batches)  
+                loss=self.train_step(model, epochs, opt, ch1, ch2, batches)
                 if i%100==0 and i!=0: print('iteration='+str(i)+'/'+str(epochs))
             return loss
     
@@ -150,7 +152,10 @@ class Registration(Plot):
                 if self.execute_linked:
                     loss=tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos)))
                 else:
-                    loss=-tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos))/(1e6),axis=-1)))
+                    #loss=tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos)))
+                    loss=-tf.math.log(
+                        tf.reduce_sum(tf.exp(-1*tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos))/(1e6),axis=-1)))
+                        )
                     #loss=-tf.reduce_sum(tf.math.log((self.Neighbours_mat @ 
                     #      tf.exp(-1*tf.reduce_sum(tf.square(ch1.pos-model(ch2.pos)),axis=-1)
                     #                                 /(self.pix_size**2))[:,None])))
@@ -174,7 +179,7 @@ class Registration(Plot):
                 self.ch2.pos.assign(ch2_mapped)
                 
                 if self.Neighbours: 
-                    self.ch2NN.pos.assign(model(self.ch2NN.pos))
+                    self.ch2NN.pos.assign((model(self.ch2NN.pos)))
                     
             else: 
                 ch2_mapped=model(ch2)
@@ -217,9 +222,11 @@ class Registration(Plot):
             ch1_input = Channel(self.InputSplines(self.ch1.pos), self.ch1.frame )
             ch2_input = Channel(self.InputSplines(self.ch2.pos), self.ch2.frame )
         elif not self.execute_linked:
+            if not self.Neighbours: self.kNearestNeighbour(self.ch1.pos.numpy(), self.ch2.pos.numpy(), 
+                                                                        k=k, maxDistance=maxDistance)
             ## Create variables normalized by gridsize
-            ch1_input = Channel(self.InputSplines(self.ch1NN), np.zeros(self.ch1NN.shape[0]) )
-            ch2_input = Channel(self.InputSplines(self.ch2NN), np.zeros(self.ch2NN.shape[0]) )
+            ch1_input = Channel(self.InputSplines(self.ch1NN.pos), np.zeros(self.ch1NN.pos.shape[0]) )
+            ch2_input = Channel(self.InputSplines(self.ch2NN.pos), np.zeros(self.ch2NN.pos.shape[0]) )
         elif self.execute_linked and (not self.linked): raise Exception('Tried to execute linked but dataset has not been linked.')
         elif (not self.execute_linked) and (not self.Neighbours): raise Exception('Tried to execute linked but no neighbours have been generated.')
         else: 

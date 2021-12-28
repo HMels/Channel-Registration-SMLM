@@ -179,7 +179,6 @@ def ErrorDistribution_r(DS1, fig, ax, nbins=30, xlim=31, error=None, mu=.3, fit_
     if fit_data: ## fit bar plot data using curve_fit
         def func(r, sigma, mu): # from Churchman et al 2006
             sigma2=sigma**2
-            #if mu==0: return r/sigma2*np.exp(-r**2/2/sigma2)
             return (r/sigma2)*np.exp(-(mu**2+r**2)/2/sigma2)*scpspc.jv(0, r*mu/sigma2)
 
         N = DS1.ch1.pos.shape[0] * ( n[1][1]-n[1][0] )
@@ -457,3 +456,9 @@ fig,axFOV=DS1.ErrorFOV(None, figsize=(4.148,1.93),placement='right', center=[4.8
 fig.savefig(output_path+'fig7', transparent=True, dpi=dpi)
 fig,axFOV=DS2.ErrorFOV(None, figsize=(3.66,1.93),placement='right', center=[4.8,4.8], colorbar=False)
 fig.savefig(output_path+'fig8', transparent=True, dpi=dpi)
+
+#%% fig6
+fig,axFOV=DS1.ErrorFOV(None, figsize=(4.148,1.93),placement='right', center=[4.8,4.8])
+fig.savefig(output_path+'fig9', transparent=True, dpi=dpi)
+fig,axFOV=DS2.ErrorFOV(None, figsize=(3.66,1.93),placement='right', center=[4.8,4.8], colorbar=False)
+fig.savefig(output_path+'fig10', transparent=True, dpi=dpi)

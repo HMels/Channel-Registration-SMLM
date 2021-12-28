@@ -47,9 +47,24 @@ class dataset(Registration):
         self.Neighbours=False
         
         
-    def ClusterDataset(self, loc_error=None):
+    def save_dataset(self):
+        self.linked_original=self.linked
+        del self.ch10, self.ch20
+        self.ch10=copy.deepcopy(self.ch1)
+        self.ch20=copy.deepcopy(self.ch2)  
+        
+        
+    def ClusterDataset(self, loc_error=None, linked=None, FrameLinking=None, 
+                       BatchOptimization=None, execute_linked=None):
         # outputs a dataset of cluster center of masses
-        other=copy.deepcopy(self)
+        other=copy.deepcopy(self)        
+        other.loc_error=loc_error if loc_error is not None else None
+        other.coloc_error=np.sqrt(2)*loc_error if loc_error is not None else None
+        other.linked=linked if linked is not None else self.linked
+        other.FrameLinking=FrameLinking if FrameLinking is not None else self.FrameLinking
+        other.BatchOptimization=BatchOptimization if BatchOptimization is not None else self.BatchOptimization
+        other.execute_linked=linked if execute_linked is not None else self.execute_linked
+        
         pos1=self.ch1.ClusterCOM()[0]
         pos2=self.ch2.ClusterCOM()[0]
         del other.ch1, other.ch2, other.ch20linked, other.ch10, other.ch20
@@ -58,13 +73,11 @@ class dataset(Registration):
         other.ch10=Channel(pos1, np.ones(pos1.shape[0]))
         other.ch20=Channel(pos2, np.ones(pos2.shape[0]))
         other.ch20linked=Channel(pos2, np.ones(pos2.shape[0]))
-        other.loc_error=loc_error if loc_error is not None else None
-        other.coloc_error=np.sqrt(2)*loc_error if loc_error is not None else None
         return other
         
         
     #%% load_dataset
-    def load_dataset_excel(self, transpose=False):
+    def load_dataset_excel(self, transpose=False, mirror_xaxis=False, mirror_yaxis=False):
         data = pd.read_csv(self.path)
         grouped = data.groupby(data.Channel)
         ch1 = grouped.get_group(1)
@@ -86,12 +99,24 @@ class dataset(Registration):
             self.ch10.transpose_axis()
             self.ch20.transpose_axis()
             self.ch20linked.transpose_axis()
+        if mirror_xaxis:
+            self.ch1.mirror_xaxis()
+            self.ch2.mirror_xaxis()
+            self.ch10.mirror_xaxis()
+            self.ch20.mirror_xaxis()
+            self.ch20linked.mirror_xaxis()
+        if mirror_yaxis:
+            self.ch1.mirror_yaxis()
+            self.ch2.mirror_yaxis()
+            self.ch10.mirror_yaxis()
+            self.ch20.mirror_yaxis()
+            self.ch20linked.mirror_yaxis()
         
         self.img, self.imgsize, self.mid = self.imgparams()      # loading the image parameters
         self.center_image()
     
     
-    def load_dataset_hdf5(self, align_rcc=True, transpose=False):
+    def load_dataset_hdf5(self, align_rcc=True, transpose=False, mirror_xaxis=False, mirror_yaxis=False):
         ## Loading dataset
         if len(self.path)==1 or isinstance(self.path,str):
             # Dataset is grouped, meaning it has to be split manually
@@ -129,6 +154,18 @@ class dataset(Registration):
         self.ch10=copy.deepcopy(self.ch1)
         self.ch20=copy.deepcopy(self.ch2)
         self.ch20linked=copy.deepcopy(self.ch2)
+        if mirror_xaxis:
+            self.ch1.mirror_xaxis()
+            self.ch2.mirror_xaxis()
+            self.ch10.mirror_xaxis()
+            self.ch20.mirror_xaxis()
+            self.ch20linked.mirror_xaxis()
+        if mirror_yaxis:
+            self.ch1.mirror_yaxis()
+            self.ch2.mirror_yaxis()
+            self.ch10.mirror_yaxis()
+            self.ch20.mirror_yaxis()
+            self.ch20linked.mirror_yaxis()
         
         self.img, self.imgsize, self.mid = self.imgparams()                     # loading the image parameters
         self.center_image()
@@ -160,6 +197,20 @@ class dataset(Registration):
         self.mid = tf.Variable([0,0], dtype=tf.float32)
         
         
+    def zero_image(self, offsetx=0, offsety=None):
+        if offsety is None: offsety=offsetx
+        x1_min = np.min([np.min(tf.reduce_min((self.ch1.pos[:,0]))),
+                                  np.min(tf.reduce_min((self.ch2.pos[:,0])))])
+        x2_min = np.min([np.min(tf.reduce_min((self.ch1.pos[:,1]))),
+                                  np.min(tf.reduce_min((self.ch2.pos[:,1])))]) 
+        self.ch1.offset([-x1_min+offsetx, -x2_min+offsety])
+        self.ch2.offset([-x1_min+offsetx, -x2_min+offsety])
+        self.ch10.offset([-x1_min+offsetx, -x2_min+offsety])
+        self.ch20.offset([-x1_min+offsetx, -x2_min+offsety])
+        self.ch20linked.offset([-x1_min+offsetx, -x2_min+offsety])
+        self.img, self.imgsize, self.mid = self.imgparams() 
+        return np.array([-x1_min+offsetx, -x2_min+offsety])
+        
     def center_channels(self):
         self.ch1.center()
         self.ch2.center()
@@ -170,13 +221,15 @@ class dataset(Registration):
         
     #%% Split dataset or load subset
     def AppendDataset(self, other):
-        self.ch1.AppendChannel(other.ch1)
-        if self.ch10 is not None and other.ch10 is not None: self.ch10.AppendChannel(other.ch10)
-        if self.ch2 is not None and other.ch2 is not None: self.ch2.AppendChannel(other.ch2)
-        if self.ch20 is not None and other.ch20 is not None: self.ch20.AppendChannel(other.ch20)
-        if self.ch20linked is not None and other.ch20linked is not None:
-            self.ch20linked.AppendChannel(other.ch20linked)
-        
+        self1=copy.deepcopy(self)
+        self1.ch1.AppendChannel(other.ch1)
+        if self1.ch10 is not None and other.ch10 is not None: self1.ch10.AppendChannel(other.ch10)
+        if self1.ch2 is not None and other.ch2 is not None: self1.ch2.AppendChannel(other.ch2)
+        if self1.ch20 is not None and other.ch20 is not None: self1.ch20.AppendChannel(other.ch20)
+        if self1.ch20linked is not None and other.ch20linked is not None:
+            self1.ch20linked.AppendChannel(other.ch20linked)
+        return self1
+    
     
     def SubsetWindow(self, window=None, subset=None, linked=None):
     # loading subset of dataset by creating a window of size subset 
@@ -440,7 +493,7 @@ class dataset(Registration):
                         ]) )
                     pos+=count
                     i+=1
-                    
+                
                 for idx in idxlist:
                     if len(idx[0])!=0:
                         i=idx[0][0]
@@ -488,12 +541,8 @@ class dataset(Registration):
         
         
     #%% Generate 
-    def load_kNN(self, k, maxDistance=2000):
-        self.ch1NN, self.ch2NN = self.kNearestNeighbour(self.ch1.pos.numpy(), self.ch2.pos.numpy(), 
-                                                        k=k, maxDistance=maxDistance)
-    
-    
     def kNearestNeighbour(self, pos1=None, pos2=None, k=8, maxDistance=2000):
+        print('Generating',k,'nearest neighbours within ', maxDistance,'nm')
         if pos1 is None: pos1=self.ch1.pos.numpy()
         if pos2 is None: pos2=self.ch2.pos.numpy()
         with Context() as ctx: # loading all NN
@@ -510,63 +559,12 @@ class dataset(Registration):
                 pos2NN.append(tf.gather(pos2sbs,indx))
             pos+=count
             i+=1
-        self.ch1NN=tf.reshape(tf.concat(pos1NN,axis=0), [-1,2])
-        self.ch2NN=tf.reshape(tf.concat(pos2NN,axis=0), [-1,2])
+        self.ch1NN=Channel(tf.reshape(tf.concat(pos1NN,axis=0), [-1,2]))
+        self.ch2NN=Channel(tf.reshape(tf.concat(pos2NN,axis=0), [-1,2]))
+        self.Neighbours=True
         return self.ch1NN, self.ch2NN
     
     
-    def find_neighbours(self, maxDistance=50, FrameLinking=None):
-    # Tries to generate neighbours according to all spots
-        print('Finding neighbours within a distance of',maxDistance,'nm.')
-        if FrameLinking is None: FrameLinking=self.FrameLinking
-        maxDistance=np.float32(maxDistance)
-        self.NN_maxDistance=maxDistance
-        
-        if FrameLinking:
-            frame,_=tf.unique(self.ch1.frame)
-            pos1, pos2, frame1=([],[],[])
-            self.counts_Neighbours,self.Neighbours_mat=([],[])  ############
-            for fr in frame:
-                # Generate neighbouring indices per frame
-                framepos1=self.ch1.pos.numpy()[self.ch1.frame==fr,:]
-                framepos2=self.ch2.pos.numpy()[self.ch2.frame==fr,:]
-                with Context() as ctx: # loading all NN
-                    counts,indices = PostProcessMethods(ctx).FindNeighbors(framepos1, framepos2, maxDistance)
-            
-                pos,i=(0,0)
-                for count in counts:
-                    pos1.append(tf.gather(framepos1, i * np.ones([count], dtype=int)))
-                    pos2.append(tf.gather(framepos2, indices[pos:pos+count]))
-                    frame1.append( fr * np.ones([count], dtype=int) )
-                    pos+=count
-                    i+=1
-                    
-                self.counts_Neighbours.append(tf.reduce_sum(counts))
-                #self.Neighbours_mat.append(self.GenerateNeighboursMat(framepos1, counts))
-                
-            #if not self.BatchOptimization: self.Neighbours_mat=self.AppendMat(self.Neighbours_mat)
-        else:
-            with Context() as ctx: # loading all NN
-                counts,indices = PostProcessMethods(ctx).FindNeighbors(self.ch1.pos.numpy(), 
-                                                                       self.ch2.pos.numpy(), maxDistance)
-        
-            ## putting all NNidx in a list 
-            (pos1, pos2, frame1, pos, i) = ([], [], [], 0, 0)
-            for count in counts:
-                pos1.append(tf.gather(self.ch1.pos, i * np.ones([count], dtype=int)))
-                pos2.append(tf.gather(self.ch2.pos, indices[pos:pos+count]))
-                frame1.append(tf.gather(self.ch1.frame, i * np.ones([count], dtype=int)))
-                pos+=count
-                i+=1
-            
-            #self.Neighbours_mat=self.GenerateNeighboursMat(counts)
-            
-        # load matrix as Channel class
-        self.ch1NN = Channel( tf.concat(pos1, axis=0), tf.concat(frame1, axis=0) )
-        self.ch2NN = Channel( tf.concat(pos2, axis=0), tf.concat(frame1, axis=0) )
-        self.Neighbours=True
-        
-        
     def random_choice(self,original_length, final_length):
         if original_length<final_length: raise ValueError('Invalid Input')
         lst=[]
