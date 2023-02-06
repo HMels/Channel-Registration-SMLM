@@ -1,4 +1,5 @@
-# 24-channel-alignment
+Channel-Registration-SMLM
+
 This program implements 2D Catmul-Rom splines together with the Affine transform to properly align (Register) two channels in super resolution microscopy.
 
 ## Requirements
